@@ -7,10 +7,7 @@ import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVulkan;
 import org.lwjgl.system.MemoryStack;
-import org.lwjgl.vulkan.VK10;
-import org.lwjgl.vulkan.VkApplicationInfo;
-import org.lwjgl.vulkan.VkInstance;
-import org.lwjgl.vulkan.VkInstanceCreateInfo;
+import org.lwjgl.vulkan.*;
 
 import static org.lwjgl.system.MemoryStack.*;
 
@@ -51,13 +48,20 @@ public class AtomikVk {
             throw new AssertionError("No window!");
         }
 
-        VkInstanceCreateInfo vkInstanceCreateInfo = VkInstanceCreateInfo.create();
-
-        VkApplicationInfo vkAppInfo = vkInstanceCreateInfo.pApplicationInfo();
-
         try (MemoryStack stack = stackPush()) {
+
+            PointerBuffer extensions = stack.mallocPointer(vkRequiredExtensions.remaining() + 1);
+            extensions.put(vkRequiredExtensions);
+            extensions.put(stack.UTF8(KHRGetPhysicalDeviceProperties2.VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME));
+            extensions.flip();
+
+            VkInstanceCreateInfo vkInstanceCreateInfo = VkInstanceCreateInfo.create()
+                    .ppEnabledExtensionNames(extensions)
+                    .pApplicationInfo(VkApplicationInfo.mallocStack(stack).apiVersion(VK11.VK_API_VERSION_1_1));
+
+
             PointerBuffer vkInstanceBuffer = stack.mallocPointer(1);
-            if (VK10.vkCreateInstance(vkInstanceCreateInfo, null, vkInstanceBuffer) != VK10.VK_SUCCESS) {
+            if (VK11.vkCreateInstance(vkInstanceCreateInfo, null, vkInstanceBuffer) != VK10.VK_SUCCESS) {
                 GLFW.glfwTerminate();
                 throw new AssertionError("Failed to create VkInstance!");
             }
