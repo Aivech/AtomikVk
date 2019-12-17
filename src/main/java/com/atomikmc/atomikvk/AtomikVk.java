@@ -2,6 +2,7 @@ package com.atomikmc.atomikvk;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVulkan;
@@ -12,7 +13,7 @@ public class AtomikVk {
 
     public static void main(String[] args) {
         if (!GLFW.glfwInit()) {
-            throw new Error("GLFW init failed");
+            throw new AssertionError("GLFW init failed");
         }
 
         GLFW.glfwSetErrorCallback((error, description) -> {
@@ -21,11 +22,28 @@ public class AtomikVk {
         });
 
         if (!GLFWVulkan.glfwVulkanSupported()) {
-            throw new Error("No Vulkan");
+            GLFW.glfwTerminate();
+            throw new AssertionError("No Vulkan");
+        }
+
+        PointerBuffer vkRequiredExtensions = GLFWVulkan.glfwGetRequiredInstanceExtensions();
+        if (vkRequiredExtensions == null) {
+            GLFW.glfwTerminate();
+            throw new AssertionError("Missing list of required Vulkan extensions");
         }
 
         GLFW.glfwWindowHint(GLFW.GLFW_CLIENT_API, GLFW.GLFW_NO_API);
 
+        long window = GLFW.glfwCreateWindow(640, 480, "AtomikVk", 0, 0);
+
+        if (window == 0) {
+            GLFW.glfwTerminate();
+            throw new AssertionError("No window!");
+        }
+
+        while (!GLFW.glfwWindowShouldClose(window)) {
+
+        }
 
         GLFW.glfwTerminate();
     }
