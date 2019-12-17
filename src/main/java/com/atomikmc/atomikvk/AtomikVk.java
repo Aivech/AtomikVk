@@ -12,6 +12,7 @@ import org.lwjgl.vulkan.VkInstance;
 import org.lwjgl.vulkan.VkInstanceCreateInfo;
 
 import java.awt.*;
+import java.nio.LongBuffer;
 
 import static org.lwjgl.system.MemoryUtil.*;
 
@@ -62,10 +63,18 @@ public class AtomikVk {
 
         VkInstance vkInstance = new VkInstance(vkInstanceBuffer.get(0), vkInstanceCreateInfo);
 
+        LongBuffer surfaceBuffer = LongBuffer.allocate(1);
+
+        if (GLFWVulkan.glfwCreateWindowSurface(vkInstance, window, null, surfaceBuffer) != VK10.VK_SUCCESS) {
+            GLFW.glfwTerminate();
+            throw new AssertionError("Failed to create Vulkan surface from window!");
+        }
 
         while (!GLFW.glfwWindowShouldClose(window)) {
+
             GLFW.glfwPollEvents();
         }
+
 
         GLFW.glfwTerminate();
     }
