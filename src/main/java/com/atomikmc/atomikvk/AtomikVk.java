@@ -25,6 +25,8 @@ import static org.lwjgl.vulkan.VK11.*;
 
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 public class AtomikVk {
 
@@ -77,17 +79,58 @@ public class AtomikVk {
             _CHECK_(vkCreateInstance(vkInstanceCreateInfo, null, vkInstanceBuffer), "Failed to create VkInstance!");
 
             VkInstance vkInstance = new VkInstance(vkInstanceBuffer.get(0), vkInstanceCreateInfo);
-            LongBuffer surfaceBuffer = stack.mallocLong(1);
+            LongBuffer pSurface = stack.mallocLong(1);
 
-            _CHECK_(glfwCreateWindowSurface(vkInstance, window, null, surfaceBuffer), "Failed to create Vulkan surface from window!");
+            _CHECK_(glfwCreateWindowSurface(vkInstance, window, null, pSurface), "Failed to create Vulkan surface from window!");
+            long surface = pSurface.get(0);
 
             IntBuffer pPhysicalDeviceCount = stack.mallocInt(1);
+            _CHECK_(vkEnumeratePhysicalDevices(vkInstance, pPhysicalDeviceCount, null), "Could not get physical devices!");
             int physDeviceCount = pPhysicalDeviceCount.get(0);
             PointerBuffer pPhysDevices = stack.mallocPointer(physDeviceCount);
             _CHECK_(vkEnumeratePhysicalDevices(vkInstance, pPhysicalDeviceCount, pPhysDevices), "Could not get physical devices!");
 
+            DeviceAndQueueFamilies deviceAndQueueFamilies;
             for (int i = 0; i < physDeviceCount; i++) {
-                VkPhysicalDevice dev = new VkPhysicalDevice(pPhysDevices.get(i), vkInstance);
+                VkPhysicalDevice device = new VkPhysicalDevice(pPhysDevices.get(i), vkInstance);
+                QueueFamilies queuesFamilies = new QueueFamilies();
+                try (MemoryStack stack1 = stackPush()) {
+                    IntBuffer pQueueFamilyPropertyCount = stack1.mallocInt(1);
+                    vkGetPhysicalDeviceQueueFamilyProperties(device, pQueueFamilyPropertyCount, null);
+                    VkQueueFamilyProperties.Buffer familyProperties = VkQueueFamilyProperties.create(pQueueFamilyPropertyCount.get(0));
+                    vkGetPhysicalDeviceQueueFamilyProperties(device, pQueueFamilyPropertyCount, familyProperties);
+
+                    int queueFamilyIndex = 0;
+                    for (VkQueueFamilyProperties queueFamilyProps : familyProperties) {
+                        IntBuffer pSupported = stack1.mallocInt(1);
+                        if (queueFamilyProps.queueCount() < 1) {
+                            continue;
+                        }
+                        vkGetPhysicalDeviceSurfaceSupportKHR(device, queueFamilyIndex, surface, pSupported);
+
+                        if ((queueFamilyProps.queueFlags() & VK_QUEUE_GRAPHICS_BIT) != 0) {
+                            queuesFamilies.graphicsFamilies.add(queueFamilyIndex);
+                        }
+
+                        if (pSupported.get(0) != 0) {
+                            queuesFamilies.presentFamilies.add(queueFamilyIndex);
+                        }
+
+                        queueFamilyIndex++;
+                    }
+
+                    VkPhysicalDeviceProperties deviceProperties = VkPhysicalDeviceProperties.mallocStack(stack);
+                    vkGetPhysicalDeviceProperties(device, deviceProperties);
+
+                    boolean isDiscrete = deviceProperties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+                    boolean isRenderable = isDiscrete && !queuesFamilies.graphicsFamilies.isEmpty() && !queuesFamilies.presentFamilies.isEmpty();
+
+                    if (isRenderable) {
+                        deviceAndQueueFamilies = new DeviceAndQueueFamilies(device, queuesFamilies);
+                        break;
+                    }
+                }
+
             }
 
 
@@ -160,6 +203,28 @@ public class AtomikVk {
                 return "A validation layer found an error.";
             default:
                 return String.format("%s [%d]", "Unknown", Integer.valueOf(result));
+        }
+    }
+
+    private static class QueueFamilies {
+        List<Integer> graphicsFamilies = new ArrayList<>();
+        List<Integer> presentFamilies = new ArrayList<>();
+
+        int findSingleSuitableQueue() {
+            return graphicsFamilies
+                    .stream()
+                    .filter(i -> presentFamilies.contains(i)).findAny().orElseThrow(
+                            () -> new AssertionError("No suitable queue found"));
+        }
+    }
+
+    private static class DeviceAndQueueFamilies {
+        VkPhysicalDevice physicalDevice;
+        QueueFamilies queuesFamilies;
+
+        DeviceAndQueueFamilies(VkPhysicalDevice physicalDevice, QueueFamilies queuesFamilies) {
+            this.physicalDevice = physicalDevice;
+            this.queuesFamilies = queuesFamilies;
         }
     }
 }
