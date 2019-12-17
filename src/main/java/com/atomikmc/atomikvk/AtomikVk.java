@@ -6,10 +6,13 @@ import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVulkan;
+import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VK10;
 import org.lwjgl.vulkan.VkApplicationInfo;
 import org.lwjgl.vulkan.VkInstance;
 import org.lwjgl.vulkan.VkInstanceCreateInfo;
+
+import static org.lwjgl.system.MemoryStack.*;
 
 import java.nio.LongBuffer;
 
@@ -52,28 +55,24 @@ public class AtomikVk {
 
         VkApplicationInfo vkAppInfo = vkInstanceCreateInfo.pApplicationInfo();
 
-        PointerBuffer vkInstanceBuffer = PointerBuffer.allocateDirect(1);
+        try (MemoryStack stack = stackPush()) {
+            PointerBuffer vkInstanceBuffer = stack.mallocPointer(1);
+            if (VK10.vkCreateInstance(vkInstanceCreateInfo, null, vkInstanceBuffer) != VK10.VK_SUCCESS) {
+                GLFW.glfwTerminate();
+                throw new AssertionError("Failed to create VkInstance!");
+            }
 
-        if (VK10.vkCreateInstance(vkInstanceCreateInfo, null, vkInstanceBuffer) != VK10.VK_SUCCESS) {
-            GLFW.glfwTerminate();
-            throw new AssertionError("Failed to create VkInstance!");
-        }
+            VkInstance vkInstance = new VkInstance(vkInstanceBuffer.get(0), vkInstanceCreateInfo);
+            LongBuffer surfaceBuffer = stack.mallocLong(1);
 
-        System.out.println(vkInstanceBuffer.get(0));
+            if (GLFWVulkan.glfwCreateWindowSurface(vkInstance, window, null, surfaceBuffer) != VK10.VK_SUCCESS) {
+                GLFW.glfwTerminate();
+                throw new AssertionError("Failed to create Vulkan surface from window!");
+            }
+            while (!GLFW.glfwWindowShouldClose(window)) {
 
-        VkInstance vkInstance = new VkInstance(vkInstanceBuffer.get(0), vkInstanceCreateInfo);
-
-        LongBuffer surfaceBuffer = LongBuffer.allocate(1);
-
-
-        if (GLFWVulkan.glfwCreateWindowSurface(vkInstance, window, null, surfaceBuffer) != VK10.VK_SUCCESS) {
-            GLFW.glfwTerminate();
-            throw new AssertionError("Failed to create Vulkan surface from window!");
-        }
-
-        while (!GLFW.glfwWindowShouldClose(window)) {
-
-            GLFW.glfwPollEvents();
+                GLFW.glfwPollEvents();
+            }
         }
 
 
