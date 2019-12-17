@@ -42,7 +42,7 @@ public class AtomikVk {
         }
 
         while (!GLFW.glfwWindowShouldClose(window)) {
-
+            GLFW.glfwPollEvents();
         }
 
         GLFW.glfwTerminate();
