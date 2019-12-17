@@ -6,6 +6,14 @@ import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVulkan;
+import org.lwjgl.vulkan.VK10;
+import org.lwjgl.vulkan.VkApplicationInfo;
+import org.lwjgl.vulkan.VkInstance;
+import org.lwjgl.vulkan.VkInstanceCreateInfo;
+
+import java.awt.*;
+
+import static org.lwjgl.system.MemoryUtil.*;
 
 public class AtomikVk {
 
@@ -40,6 +48,20 @@ public class AtomikVk {
             GLFW.glfwTerminate();
             throw new AssertionError("No window!");
         }
+
+        VkInstanceCreateInfo vkInstanceCreateInfo = VkInstanceCreateInfo.create();
+
+        VkApplicationInfo vkAppInfo = vkInstanceCreateInfo.pApplicationInfo();
+
+        PointerBuffer vkInstanceBuffer = PointerBuffer.allocateDirect(1);
+
+        if (VK10.vkCreateInstance(vkInstanceCreateInfo, null, vkInstanceBuffer) != VK10.VK_SUCCESS) {
+            GLFW.glfwTerminate();
+            throw new AssertionError("Failed to create VkInstance!");
+        }
+
+        VkInstance vkInstance = new VkInstance(vkInstanceBuffer.get(0), vkInstanceCreateInfo);
+
 
         while (!GLFW.glfwWindowShouldClose(window)) {
             GLFW.glfwPollEvents();
