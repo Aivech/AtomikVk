@@ -132,7 +132,7 @@ public class AtomikVk {
                     vkGetPhysicalDeviceProperties(device, deviceProperties);
 
                     boolean isDiscrete = deviceProperties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
-                    boolean isRenderable = isDiscrete && !queuesFamilies.graphicsFamilies.isEmpty() && !queuesFamilies.presentFamilies.isEmpty();
+                    boolean isRenderable = /*isDiscrete &&*/ !queuesFamilies.graphicsFamilies.isEmpty() && !queuesFamilies.presentFamilies.isEmpty();
 
                     if (isRenderable) {
                         deviceAndQueueFamilies = new DeviceAndQueueFamilies(device, queuesFamilies);
