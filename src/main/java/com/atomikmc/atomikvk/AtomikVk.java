@@ -360,6 +360,28 @@ public class AtomikVk {
             if (swapchain != null) {
                 swapchain.free();
             }
+
+            IntBuffer pImageCount = stack.mallocInt(1);
+            _CHECK_(vkGetSwapchainImagesKHR(device, pSwapChain.get(0), pImageCount, null),
+                    "Failed to get swapchain images count");
+            LongBuffer pSwapchainImages = stack.mallocLong(pImageCount.get(0));
+            _CHECK_(vkGetSwapchainImagesKHR(device, pSwapChain.get(0), pImageCount, pSwapchainImages),
+                    "Failed to get swapchain images");
+
+            long[] images = new long[pImageCount.get(0)];
+            long[] imageViews = new long[pImageCount.get(0)];
+            pSwapchainImages.get(images, 0, images.length);
+            LongBuffer pImageView = stack.mallocLong(1);
+            for (int i = 0; i < pImageCount.get(0); i++) {
+                _CHECK_(vkCreateImageView(device, VkImageViewCreateInfo.mallocStack(stack)
+                        .format(surfaceFormat.colorFormat)
+                        .viewType(VK_IMAGE_TYPE_2D)
+                        .subresourceRange(r -> r.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).layerCount(1).levelCount(1))
+                        .image(images[i]), null, pImageView), "Failed to create image view");
+                imageViews[i] = pImageView.get(0);
+            }
+            return new Swapchain(pSwapChain.get(0), images, imageViews, swapchainExtents.x, swapchainExtents.y, surfaceFormat);
+
         }
     }
 
