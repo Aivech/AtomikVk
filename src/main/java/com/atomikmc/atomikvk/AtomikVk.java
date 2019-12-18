@@ -23,6 +23,7 @@ import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.*;
 import static org.lwjgl.vulkan.VK11.*;
 
+import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.util.ArrayList;
@@ -65,13 +66,13 @@ public class AtomikVk {
 
         try (MemoryStack stack = stackPush()) {
 
-            PointerBuffer extensions = stack.mallocPointer(vkRequiredExtensions.remaining() + 1);
-            extensions.put(vkRequiredExtensions);
-            extensions.put(stack.UTF8(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME));
-            extensions.flip();
+            PointerBuffer pExtensions = stack.mallocPointer(vkRequiredExtensions.remaining() + 1);
+            pExtensions.put(vkRequiredExtensions);
+            pExtensions.put(stack.UTF8(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME));
+            pExtensions.flip();
 
             VkInstanceCreateInfo vkInstanceCreateInfo = VkInstanceCreateInfo.create()
-                    .ppEnabledExtensionNames(extensions)
+                    .ppEnabledExtensionNames(pExtensions)
                     .pApplicationInfo(VkApplicationInfo.mallocStack(stack).apiVersion(VK_API_VERSION_1_1));
 
 
@@ -90,7 +91,7 @@ public class AtomikVk {
             PointerBuffer pPhysDevices = stack.mallocPointer(physDeviceCount);
             _CHECK_(vkEnumeratePhysicalDevices(vkInstance, pPhysicalDeviceCount, pPhysDevices), "Could not get physical devices!");
 
-            DeviceAndQueueFamilies deviceAndQueueFamilies;
+            DeviceAndQueueFamilies deviceAndQueueFamilies = null;
             for (int i = 0; i < physDeviceCount; i++) {
                 VkPhysicalDevice device = new VkPhysicalDevice(pPhysDevices.get(i), vkInstance);
                 QueueFamilies queuesFamilies = new QueueFamilies();
@@ -119,7 +120,7 @@ public class AtomikVk {
                         queueFamilyIndex++;
                     }
 
-                    VkPhysicalDeviceProperties deviceProperties = VkPhysicalDeviceProperties.mallocStack(stack);
+                    VkPhysicalDeviceProperties deviceProperties = VkPhysicalDeviceProperties.mallocStack(stack1);
                     vkGetPhysicalDeviceProperties(device, deviceProperties);
 
                     boolean isDiscrete = deviceProperties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
@@ -130,7 +131,52 @@ public class AtomikVk {
                         break;
                     }
                 }
+            }
 
+            if (deviceAndQueueFamilies == null) {
+                throw new AssertionError("No GPU Detected");
+            }
+
+            int queueFamily = deviceAndQueueFamilies.queuesFamilies.findSingleSuitableQueue();
+
+            try (MemoryStack stack1 = stackPush()) {
+                IntBuffer pPropertyCount = stack1.mallocInt(1);
+                _CHECK_(vkEnumerateDeviceExtensionProperties(deviceAndQueueFamilies.physicalDevice, (ByteBuffer) null, pPropertyCount, null),
+                        "Failed to enumerate device extensions");
+                VkExtensionProperties.Buffer pProperties = VkExtensionProperties.mallocStack(pPropertyCount.get(0), stack1);
+                _CHECK_(vkEnumerateDeviceExtensionProperties(deviceAndQueueFamilies.physicalDevice, (ByteBuffer) null, pPropertyCount,
+                        pProperties),
+                        "Failed to enumerate device extensions");
+
+                if (!isExtensionEnabled(pProperties, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
+                    throw new AssertionError("Missing required extension: " + VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+                if (!isExtensionEnabled(pProperties, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME))
+                    throw new AssertionError("Missing required extension: " + VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+
+                PointerBuffer extensions = stack1.mallocPointer(2 + 1);
+                extensions.put(stack1.UTF8(VK_KHR_SWAPCHAIN_EXTENSION_NAME))
+                        .put(stack1.UTF8(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME));
+                if (isExtensionEnabled(pProperties, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME)) {
+                    extensions.put(stack1.UTF8(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME));
+                }
+
+                VkDeviceCreateInfo pCreateInfo = VkDeviceCreateInfo.mallocStack(stack1)
+                        .pQueueCreateInfos(VkDeviceQueueCreateInfo.mallocStack(1, stack1)
+                                .queueFamilyIndex(queueFamily)
+                                .pQueuePriorities(stack1.floats(1.0f)))
+                        .ppEnabledExtensionNames(extensions.flip());
+
+                PointerBuffer pDevice = stack1.mallocPointer(1);
+                _CHECK_(vkCreateDevice(deviceAndQueueFamilies.physicalDevice, pCreateInfo, null, pDevice), "Failed to create device");
+
+                VkDevice device = new VkDevice(pDevice.get(0), deviceAndQueueFamilies.physicalDevice, pCreateInfo);
+
+                VkQueue queue = null;
+                try (MemoryStack stack2 = stackPush()) {
+                    PointerBuffer pQueue = stack.mallocPointer(1);
+                    vkGetDeviceQueue(device, queueFamily, 0, pQueue);
+                    queue = new VkQueue(pQueue.get(0), device);
+                }
             }
 
 
@@ -226,5 +272,9 @@ public class AtomikVk {
             this.physicalDevice = physicalDevice;
             this.queuesFamilies = queuesFamilies;
         }
+    }
+
+    private static boolean isExtensionEnabled(VkExtensionProperties.Buffer buf, String extension) {
+        return buf.stream().anyMatch(p -> p.extensionNameString().equals(extension));
     }
 }
