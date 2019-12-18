@@ -9,6 +9,7 @@ import org.lwjgl.glfw.GLFWVulkan;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 
+
 import static java.lang.Math.*;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.glfw.GLFWVulkan.*;
@@ -32,6 +33,14 @@ import java.util.List;
 public class AtomikVk {
 
     public static Logger logger = LogManager.getLogger("AtomikVk");
+
+    private static VkDevice device = null;
+    private static long surface = 0;
+    private static DeviceAndQueueFamilies deviceAndQueueFamilies = null;
+    private static Swapchain swapchain = null;
+
+    public static final int INITIAL_WINDOW_WIDTH = 640;
+    public static final int INITIAL_WINDOW_HEIGHT = 480;
 
     public static void main(String[] args) {
 
@@ -57,7 +66,7 @@ public class AtomikVk {
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-        long window = glfwCreateWindow(640, 480, "AtomikVk", 0, 0);
+        long window = glfwCreateWindow(INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_WIDTH, "AtomikVk", 0, 0);
 
         if (window == 0) {
             glfwTerminate();
@@ -83,7 +92,7 @@ public class AtomikVk {
             LongBuffer pSurface = stack.mallocLong(1);
 
             _CHECK_(glfwCreateWindowSurface(vkInstance, window, null, pSurface), "Failed to create Vulkan surface from window!");
-            long surface = pSurface.get(0);
+            surface = pSurface.get(0);
 
             IntBuffer pPhysicalDeviceCount = stack.mallocInt(1);
             _CHECK_(vkEnumeratePhysicalDevices(vkInstance, pPhysicalDeviceCount, null), "Could not get physical devices!");
@@ -91,7 +100,6 @@ public class AtomikVk {
             PointerBuffer pPhysDevices = stack.mallocPointer(physDeviceCount);
             _CHECK_(vkEnumeratePhysicalDevices(vkInstance, pPhysicalDeviceCount, pPhysDevices), "Could not get physical devices!");
 
-            DeviceAndQueueFamilies deviceAndQueueFamilies = null;
             for (int i = 0; i < physDeviceCount; i++) {
                 VkPhysicalDevice device = new VkPhysicalDevice(pPhysDevices.get(i), vkInstance);
                 QueueFamilies queuesFamilies = new QueueFamilies();
@@ -139,7 +147,7 @@ public class AtomikVk {
 
             int queueFamily = deviceAndQueueFamilies.queuesFamilies.findSingleSuitableQueue();
 
-            VkDevice vkDevice = null;
+
 
             try (MemoryStack stack1 = stackPush()) {
                 IntBuffer pPropertyCount = stack1.mallocInt(1);
@@ -171,16 +179,17 @@ public class AtomikVk {
                 PointerBuffer pDevice = stack1.mallocPointer(1);
                 _CHECK_(vkCreateDevice(deviceAndQueueFamilies.physicalDevice, pCreateInfo, null, pDevice), "Failed to create device");
 
-                vkDevice = new VkDevice(pDevice.get(0), deviceAndQueueFamilies.physicalDevice, pCreateInfo);
+                device = new VkDevice(pDevice.get(0), deviceAndQueueFamilies.physicalDevice, pCreateInfo);
             }
 
             VkQueue queue = null;
             try (MemoryStack stack1 = stackPush()) {
                 PointerBuffer pQueue = stack1.mallocPointer(1);
-                vkGetDeviceQueue(vkDevice, queueFamily, 0, pQueue);
-                queue = new VkQueue(pQueue.get(0), vkDevice);
+                vkGetDeviceQueue(device, queueFamily, 0, pQueue);
+                queue = new VkQueue(pQueue.get(0), device);
             }
 
+            Swapchain swapchain = createSwapChain();
 
             while (!glfwWindowShouldClose(window)) {
 
@@ -278,5 +287,125 @@ public class AtomikVk {
 
     private static boolean isExtensionEnabled(VkExtensionProperties.Buffer buf, String extension) {
         return buf.stream().anyMatch(p -> p.extensionNameString().equals(extension));
+    }
+
+    private static class Swapchain {
+        long swapchain;
+        long[] images;
+        long[] imageViews;
+        int width, height;
+        ColorFormatAndSpace surfaceFormat;
+
+        Swapchain(long swapchain, long[] images, long[] imageViews, int width, int height, ColorFormatAndSpace surfaceFormat) {
+            this.swapchain = swapchain;
+            this.images = images;
+            this.imageViews = imageViews;
+            this.width = width;
+            this.height = height;
+            this.surfaceFormat = surfaceFormat;
+        }
+
+        void free() {
+            vkDestroySwapchainKHR(device, swapchain, null);
+            for (long imageView : imageViews)
+                vkDestroyImageView(device, imageView, null);
+        }
+    }
+
+    private static class ColorFormatAndSpace {
+        int colorFormat;
+        int colorSpace;
+
+        ColorFormatAndSpace(int colorFormat, int colorSpace) {
+            this.colorFormat = colorFormat;
+            this.colorSpace = colorSpace;
+        }
+    }
+
+    private static Swapchain createSwapChain() {
+        try (MemoryStack stack = stackPush()) {
+            VkSurfaceCapabilitiesKHR surfCaps = VkSurfaceCapabilitiesKHR.mallocStack(stack);
+            _CHECK_(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(deviceAndQueueFamilies.physicalDevice, surface, surfCaps),
+                    "Failed to get physical device surface capabilities");
+
+            IntBuffer count = stack.mallocInt(1);
+            _CHECK_(vkGetPhysicalDeviceSurfacePresentModesKHR(deviceAndQueueFamilies.physicalDevice, surface, count, null),
+                    "Failed to get presentation modes count");
+            IntBuffer pPresentModes = stack.mallocInt(count.get(0));
+            _CHECK_(vkGetPhysicalDeviceSurfacePresentModesKHR(deviceAndQueueFamilies.physicalDevice, surface, count, pPresentModes),
+                    "Failed to get presentation modes");
+
+            int imageCount = min(surfCaps.minImageCount() + 1, surfCaps.maxImageCount());
+
+            ColorFormatAndSpace surfaceFormat = determineSurfaceFormat(deviceAndQueueFamilies.physicalDevice, surface);
+
+            Vector2i swapchainExtents = determineSwapchainExtents(surfCaps);
+            VkSwapchainCreateInfoKHR pCreateInfo = VkSwapchainCreateInfoKHR.mallocStack(stack)
+                    .surface(surface)
+                    .minImageCount(imageCount)
+                    .imageExtent(e -> e.set(swapchainExtents.x, swapchainExtents.y))
+                    .imageFormat(surfaceFormat.colorFormat)
+                    .imageColorSpace(surfaceFormat.colorSpace)
+                    .imageUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                    .preTransform(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+                    .imageArrayLayers(1)
+                    .imageSharingMode(VK_SHARING_MODE_EXCLUSIVE)
+                    .presentMode(VK_PRESENT_MODE_FIFO_KHR)
+                    .oldSwapchain(swapchain != null ? swapchain.swapchain : VK_NULL_HANDLE)
+                    .clipped(true)
+                    .compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR);
+
+            LongBuffer pSwapChain = stack.mallocLong(1);
+            _CHECK_(vkCreateSwapchainKHR(device, pCreateInfo, null, pSwapChain), "Failed to create swap chain");
+            if (swapchain != null) {
+                swapchain.free();
+            }
+        }
+    }
+
+    private static ColorFormatAndSpace determineSurfaceFormat(VkPhysicalDevice physicalDevice, long surface) {
+        try (MemoryStack stack = stackPush()) {
+            IntBuffer count = stack.mallocInt(1);
+            _CHECK_(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, count, null),
+                    "Failed to get device surface formats count");
+            VkSurfaceFormatKHR.Buffer pSurfaceFormats = VkSurfaceFormatKHR.mallocStack(count.get(0), stack);
+            _CHECK_(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, count, pSurfaceFormats),
+                    "Failed to get device surface formats");
+
+            int colorFormat;
+
+            if (pSurfaceFormats.remaining() == 1 && pSurfaceFormats.get(0).format() == VK_FORMAT_UNDEFINED)
+                colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
+            else
+                colorFormat = pSurfaceFormats.get(0).format();
+
+            int colorSpace = pSurfaceFormats.get(0).colorSpace();
+
+            return new ColorFormatAndSpace(colorFormat, colorSpace);
+        }
+    }
+
+    private static Vector2i determineSwapchainExtents(VkSurfaceCapabilitiesKHR surfCaps) {
+        VkExtent2D extent = surfCaps.currentExtent();
+        Vector2i ret = new Vector2i(extent.width(), extent.height());
+        if (extent.width() == -1) {
+            ret.set(max(min(INITIAL_WINDOW_WIDTH, surfCaps.maxImageExtent().width()), surfCaps.minImageExtent().width()),
+                    max(min(INITIAL_WINDOW_HEIGHT, surfCaps.maxImageExtent().height()), surfCaps.minImageExtent().height()));
+        }
+        return ret;
+    }
+
+    private static class Vector2i {
+        int x, y;
+
+        Vector2i(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        void set(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
     }
 }
