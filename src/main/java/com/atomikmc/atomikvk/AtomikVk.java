@@ -139,6 +139,8 @@ public class AtomikVk {
 
             int queueFamily = deviceAndQueueFamilies.queuesFamilies.findSingleSuitableQueue();
 
+            VkDevice vkDevice = null;
+
             try (MemoryStack stack1 = stackPush()) {
                 IntBuffer pPropertyCount = stack1.mallocInt(1);
                 _CHECK_(vkEnumerateDeviceExtensionProperties(deviceAndQueueFamilies.physicalDevice, (ByteBuffer) null, pPropertyCount, null),
@@ -169,14 +171,14 @@ public class AtomikVk {
                 PointerBuffer pDevice = stack1.mallocPointer(1);
                 _CHECK_(vkCreateDevice(deviceAndQueueFamilies.physicalDevice, pCreateInfo, null, pDevice), "Failed to create device");
 
-                VkDevice device = new VkDevice(pDevice.get(0), deviceAndQueueFamilies.physicalDevice, pCreateInfo);
+                vkDevice = new VkDevice(pDevice.get(0), deviceAndQueueFamilies.physicalDevice, pCreateInfo);
+            }
 
-                VkQueue queue = null;
-                try (MemoryStack stack2 = stackPush()) {
-                    PointerBuffer pQueue = stack.mallocPointer(1);
-                    vkGetDeviceQueue(device, queueFamily, 0, pQueue);
-                    queue = new VkQueue(pQueue.get(0), device);
-                }
+            VkQueue queue = null;
+            try (MemoryStack stack2 = stackPush()) {
+                PointerBuffer pQueue = stack.mallocPointer(1);
+                vkGetDeviceQueue(vkDevice, queueFamily, 0, pQueue);
+                queue = new VkQueue(pQueue.get(0), vkDevice);
             }
 
 
