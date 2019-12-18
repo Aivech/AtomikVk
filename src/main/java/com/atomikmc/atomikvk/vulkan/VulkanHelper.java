@@ -85,6 +85,7 @@ public class VulkanHelper {
             commandPool = createCommandPool(0, device, queueFamily);
             long renderPass = createRasterRenderPass(device, swapChain);
             long[] framebuffers = createFramebuffers(device, swapChain, renderPass, null);
+            VkCommandBuffer[] rasterCommandBuffers = createRasterCommandBuffers();
         }
     }
 
@@ -331,6 +332,20 @@ public class VulkanHelper {
                     .height(swapchain.height)
                     .layers(1)
                     .renderPass(renderPass);
+            framebuffers = new long[swapchain.images.length];
+            LongBuffer pFramebuffer = stack.mallocLong(1);
+            for (int i = 0; i < swapchain.images.length; i++) {
+                pAttachments.put(0, swapchain.imageViews[i]);
+                _CHECK_(vkCreateFramebuffer(device, fci, null, pFramebuffer), "Failed to create framebuffer");
+                framebuffers[i] = pFramebuffer.get(0);
+            }
+            return framebuffers;
+        }
+    }
+
+    private static VkCommandBuffer[] createRasterCommandBuffers() {
+        try (MemoryStack stack = stackPush()) {
+
         }
     }
 
