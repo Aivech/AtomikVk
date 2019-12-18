@@ -175,8 +175,8 @@ public class AtomikVk {
             }
 
             VkQueue queue = null;
-            try (MemoryStack stack2 = stackPush()) {
-                PointerBuffer pQueue = stack.mallocPointer(1);
+            try (MemoryStack stack1 = stackPush()) {
+                PointerBuffer pQueue = stack1.mallocPointer(1);
                 vkGetDeviceQueue(vkDevice, queueFamily, 0, pQueue);
                 queue = new VkQueue(pQueue.get(0), vkDevice);
             }
