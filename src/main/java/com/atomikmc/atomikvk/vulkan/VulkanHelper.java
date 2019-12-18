@@ -31,6 +31,13 @@ public class VulkanHelper {
     private static VkDevice device = null;
     private static long surface = 0;
     private static SwapChain swapChain = null;
+    private static long[] renderFences = null;
+    private static Long commandPool;
+    private static long renderPass;
+    private static long[] framebuffers;
+    private static VkCommandBuffer[] rasterCommandBuffers;
+    private static long[] imageAcquireSemaphores;
+    private static long[] renderCompleteSemaphores;
 
     public static void setupVulkan(long window) {
         try (MemoryStack stack = stackPush()) {
@@ -80,6 +87,12 @@ public class VulkanHelper {
 
     public static void cleanupVulkan() {
         _CHECK_(vkDeviceWaitIdle(device), "Failed to wait for device idle!");
+
+        for (int i = 0; i < swapChain.images.length; i++) {
+            vkDestroySemaphore(device, imageAcquireSemaphores[i], null);
+            vkDestroySemaphore(device, renderCompleteSemaphores[i], null);
+            vkDestroyFence(device, renderFences[i], null);
+        }
 
         swapChain.free(device);
         vkDestroyDevice(device, null);
