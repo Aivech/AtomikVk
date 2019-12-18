@@ -27,6 +27,10 @@ import static org.lwjgl.vulkan.KHRSwapchain.*;
 import static org.lwjgl.vulkan.VK11.*;
 
 public class VulkanHelper {
+    private static VkInstance vkInstance = null;
+    private static VkDevice device = null;
+    private static long surface = 0;
+    private static SwapChain swapChain = null;
 
     public static void setupVulkan(long window) {
         try (MemoryStack stack = stackPush()) {
@@ -50,12 +54,12 @@ public class VulkanHelper {
             // create and wrap VkInstance
             PointerBuffer vkInstanceBuffer = stack.mallocPointer(1);
             _CHECK_(vkCreateInstance(vkInstanceCreateInfo, null, vkInstanceBuffer), "Failed to create VkInstance!");
-            VkInstance vkInstance = new VkInstance(vkInstanceBuffer.get(0), vkInstanceCreateInfo);
+            vkInstance = new VkInstance(vkInstanceBuffer.get(0), vkInstanceCreateInfo);
 
             // create surface from window
             LongBuffer pSurface = stack.mallocLong(1);
             _CHECK_(glfwCreateWindowSurface(vkInstance, window, null, pSurface), "Failed to create Vulkan surface from window!");
-            long surface = pSurface.get(0);
+            surface = pSurface.get(0);
 
             // find all Vulkan-compatible hardware
             IntBuffer pPhysicalDeviceCount = stack.mallocInt(1);
@@ -68,10 +72,19 @@ public class VulkanHelper {
 
             int queueFamily = deviceAndQueueFamilies.queuesFamilies.findSingleSuitableQueue();
 
-            VkDevice device = createVkDevice(deviceAndQueueFamilies, queueFamily);
+            device = createVkDevice(deviceAndQueueFamilies, queueFamily);
             VkQueue queue = createVkQueue(device, queueFamily);
-            SwapChain swapChain = createSwapChain(device, surface, deviceAndQueueFamilies, null);
+            swapChain = createSwapChain(device, surface, deviceAndQueueFamilies, swapChain);
         }
+    }
+
+    public static void cleanupVulkan() {
+        _CHECK_(vkDeviceWaitIdle(device), "Failed to wait for device idle!");
+
+        swapChain.free(device);
+        vkDestroyDevice(device, null);
+        vkDestroySurfaceKHR(vkInstance, surface, null);
+        vkDestroyInstance(vkInstance, null);
     }
 
     private static DeviceAndQueueFamilies chooseGraphicsDevice(VkInstance vkInstance, long surface, int physDeviceCount, PointerBuffer pPhysDevices) {

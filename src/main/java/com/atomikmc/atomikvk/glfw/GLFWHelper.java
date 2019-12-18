@@ -11,6 +11,7 @@ import static org.lwjgl.glfw.GLFW.*;
 
 public class GLFWHelper {
     private static boolean vulkan = false;
+    private static long window = 0;
 
     public static final int INITIAL_WINDOW_WIDTH = 1280;
     public static final int INITIAL_WINDOW_HEIGHT = 720;
@@ -35,21 +36,28 @@ public class GLFWHelper {
             vulkan = true;
 
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+            glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-            long window = glfwCreateWindow(INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT, "AtomikVk", 0, 0);
+            window = glfwCreateWindow(INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT, "AtomikVk", 0, 0);
 
             if (window == 0) {
                 throw new AssertionError("No window!");
             }
 
             VulkanHelper.setupVulkan(window);
-
-            return window;
         }
 
+        return window;
     }
 
     public static boolean hasVulkan() {
         return vulkan;
+    }
+
+    public static void glfwCleanup() {
+        if (vulkan) VulkanHelper.cleanupVulkan();
+        else OpenGLHelper.cleanupOpenGL();
+        if (window != 0) glfwDestroyWindow(0);
+        glfwTerminate();
     }
 }

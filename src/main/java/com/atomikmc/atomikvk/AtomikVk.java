@@ -39,7 +39,7 @@ public class AtomikVk {
 
     public static Logger logger = LogManager.getLogger("AtomikVk");
 
-    private static VkDevice device = null;
+private static VkDevice device = null;
     private static long surface = 0;
     private static DeviceAndQueueFamilies deviceAndQueueFamilies = null;
     private static Swapchain swapchain = null;
@@ -191,7 +191,7 @@ public class AtomikVk {
                 glfwPollEvents();
             }
         } finally {
-            glfwTerminate();
+            GLFWHelper.glfwCleanup();
         }
     }
 
