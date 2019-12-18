@@ -12,8 +12,7 @@ import java.util.List;
 
 import static com.atomikmc.atomikvk.glfw.GLFWHelper.INITIAL_WINDOW_HEIGHT;
 import static com.atomikmc.atomikvk.glfw.GLFWHelper.INITIAL_WINDOW_WIDTH;
-import static java.lang.Math.max;
-import static java.lang.Math.min;
+import static java.lang.Math.*;
 import static org.lwjgl.glfw.GLFWVulkan.glfwCreateWindowSurface;
 import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryStack.stackPush;
@@ -32,7 +31,7 @@ public class VulkanHelper {
     private static long surface = 0;
     private static SwapChain swapChain = null;
     private static long[] renderFences = null;
-    private static Long commandPool;
+    private static Long commandPool = null;
     private static long renderPass;
     private static long[] framebuffers;
     private static VkCommandBuffer[] rasterCommandBuffers;
@@ -82,6 +81,10 @@ public class VulkanHelper {
             device = createVkDevice(deviceAndQueueFamilies, queueFamily);
             VkQueue queue = createVkQueue(device, queueFamily);
             swapChain = createSwapChain(device, surface, deviceAndQueueFamilies, swapChain);
+
+            commandPool = createCommandPool(0, device, queueFamily);
+            long renderPass = createRasterRenderPass(device, swapChain);
+            long[] framebuffers = createFramebuffers(device, swapChain, renderPass, null);
         }
     }
 
@@ -279,6 +282,56 @@ public class VulkanHelper {
                     max(min(INITIAL_WINDOW_HEIGHT, surfCaps.maxImageExtent().height()), surfCaps.minImageExtent().height()));
         }
         return ret;
+    }
+
+    private static long createCommandPool(int flags, VkDevice device, int queueFamily) {
+        try (MemoryStack stack = stackPush()) {
+            LongBuffer pCommandPool = stack.mallocLong(1);
+            _CHECK_(vkCreateCommandPool(device, VkCommandPoolCreateInfo.mallocStack(stack)
+                    .queueFamilyIndex(queueFamily)
+                    .flags(flags), null, pCommandPool), "Failed to create command queue");
+            return pCommandPool.get(0);
+        }
+    }
+
+    private static long createRasterRenderPass(VkDevice device, SwapChain swapChain) {
+        try (MemoryStack stack = stackPush()) {
+            VkRenderPassCreateInfo renderPassInfo = VkRenderPassCreateInfo.mallocStack(stack)
+                    .pAttachments(VkAttachmentDescription.mallocStack(1, stack).apply(0, d -> d
+                            .format(swapChain.surfaceFormat.colorFormat)
+                            .samples(VK_SAMPLE_COUNT_1_BIT)
+                            .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
+                            .storeOp(VK_ATTACHMENT_STORE_OP_STORE)
+                            .stencilLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE)
+                            .stencilStoreOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
+                            .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED)
+                            .finalLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)))
+                    .pSubpasses(VkSubpassDescription.mallocStack(1, stack)
+                            .pipelineBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS)
+                            .colorAttachmentCount(1)
+                            .pColorAttachments(VkAttachmentReference.mallocStack(1, stack)
+                                    .attachment(0)
+                                    .layout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)));
+            LongBuffer pRenderPass = stack.mallocLong(1);
+            _CHECK_(vkCreateRenderPass(device, renderPassInfo, null, pRenderPass), "Failed to create render pass!");
+            return pRenderPass.get(0);
+        }
+    }
+
+    private static long[] createFramebuffers(VkDevice device, SwapChain swapchain, long renderPass, long[] framebuffers) {
+        if (framebuffers != null) {
+            for (long framebuffer : framebuffers)
+                vkDestroyFramebuffer(device, framebuffer, null);
+        }
+        try (MemoryStack stack = stackPush()) {
+            LongBuffer pAttachments = stack.mallocLong(1);
+            VkFramebufferCreateInfo fci = VkFramebufferCreateInfo.mallocStack(stack)
+                    .pAttachments(pAttachments)
+                    .width(swapchain.width)
+                    .height(swapchain.height)
+                    .layers(1)
+                    .renderPass(renderPass);
+        }
     }
 
     private static boolean isExtensionEnabled(VkExtensionProperties.Buffer buf, String extension) {
