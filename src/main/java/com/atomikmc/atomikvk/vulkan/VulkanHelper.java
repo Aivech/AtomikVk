@@ -328,7 +328,7 @@ public class VulkanHelper {
 
     private static long createRasterRenderPass(VkDevice device, SwapChain swapChain) {
         try (MemoryStack stack = stackPush()) {
-            VkRenderPassCreateInfo renderPassInfo = VkRenderPassCreateInfo.mallocStack(stack)
+            VkRenderPassCreateInfo renderPassInfo = VkRenderPassCreateInfo.callocStack(stack)
                     .pAttachments(VkAttachmentDescription.mallocStack(1, stack).apply(0, d -> d
                             .format(swapChain.surfaceFormat.colorFormat)
                             .samples(VK_SAMPLE_COUNT_1_BIT)
@@ -338,7 +338,7 @@ public class VulkanHelper {
                             .stencilStoreOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
                             .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED)
                             .finalLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)))
-                    .pSubpasses(VkSubpassDescription.mallocStack(1, stack)
+                    .pSubpasses(VkSubpassDescription.callocStack(1, stack)
                             .pipelineBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS)
                             .colorAttachmentCount(1)
                             .pColorAttachments(VkAttachmentReference.mallocStack(1, stack)
