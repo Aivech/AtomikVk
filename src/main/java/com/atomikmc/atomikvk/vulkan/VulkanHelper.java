@@ -129,12 +129,22 @@ public class VulkanHelper {
             vkDestroyInstance(vkInstance, null);
     }
 
-    public static void update(int w, int h) {
+    public static void update(IntBuffer pImageIndex, int w, int h) {
         if (w != swapChain.width || h != swapChain.height) {
             vkDeviceWaitIdle(device);
             recreateOnResize();
             idx = 0;
         }
+
+        vkWaitForFences(device, renderFences[idx], true, Long.MAX_VALUE);
+        vkResetFences(device, renderFences[idx]);
+
+        _CHECK_(vkAcquireNextImageKHR(device, swapChain.swapchain, -1L, imageAcquireSemaphores[idx], VK_NULL_HANDLE,
+                pImageIndex), "Failed to acquire image");
+
+        submitAndPresent(pImageIndex.get(0), idx);
+        processFinishedFences();
+        idx = (idx + 1) % swapChain.images.length;
     }
 
     private static void freeCommandBuffers() {

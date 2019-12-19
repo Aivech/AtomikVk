@@ -57,11 +57,19 @@ public class GLFWHelper {
         return window;
     }
 
-    public static boolean update() {
-        updateFramebufferSize();
-        if (width == 0 || height == 0) return false;
+    public static void startWindowLoop() {
+        try (MemoryStack stack = stackPush()) {
+            IntBuffer pImageIndex = stack.mallocInt(1);
+            while (!glfwWindowShouldClose(window)) {
+                updateFramebufferSize();
+                if (width == 0 || height == 0) continue;
 
-        return true;
+                if (vulkan) VulkanHelper.update(pImageIndex, width, height);
+
+                glfwPollEvents();
+            }
+        }
+
     }
 
     private static void updateFramebufferSize() {
