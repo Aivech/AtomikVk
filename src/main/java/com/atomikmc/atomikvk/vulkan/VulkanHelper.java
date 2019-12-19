@@ -7,8 +7,7 @@ import org.lwjgl.vulkan.*;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 import static com.atomikmc.atomikvk.glfw.GLFWHelper.INITIAL_WINDOW_HEIGHT;
 import static com.atomikmc.atomikvk.glfw.GLFWHelper.INITIAL_WINDOW_WIDTH;
@@ -38,6 +37,11 @@ public class VulkanHelper {
     private static long[] imageAcquireSemaphores = null;
     private static long[] renderCompleteSemaphores = null;
     private static DeviceAndQueueFamilies deviceAndQueueFamilies = null;
+
+    private static VkQueue queue = null;
+
+    private static Map<Long, Runnable> waitingFenceActions = new HashMap<>();
+
 
     private static int idx = 0;
 
@@ -82,7 +86,7 @@ public class VulkanHelper {
             int queueFamily = deviceAndQueueFamilies.queuesFamilies.findSingleSuitableQueue();
 
             device = createVkDevice(deviceAndQueueFamilies, queueFamily);
-            VkQueue queue = createVkQueue(device, queueFamily);
+            queue = createVkQueue(device, queueFamily);
             swapChain = createSwapChain(device, surface, deviceAndQueueFamilies, swapChain);
 
             commandPool = createCommandPool(0, device, queueFamily);
@@ -145,6 +149,40 @@ public class VulkanHelper {
         submitAndPresent(pImageIndex.get(0), idx);
         processFinishedFences();
         idx = (idx + 1) % swapChain.images.length;
+    }
+
+    private static void submitAndPresent(int imageIndex, int idx) {
+        try (MemoryStack stack = stackPush()) {
+            _CHECK_(vkQueueSubmit(queue, VkSubmitInfo.mallocStack(stack)
+
+                    .pCommandBuffers(stack.pointers(rasterCommandBuffers[idx]))
+
+                    .pWaitSemaphores(stack.longs(imageAcquireSemaphores[idx]))
+
+                    .waitSemaphoreCount(1)
+
+                    .pWaitDstStageMask(stack.ints(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT))
+
+                    .pSignalSemaphores(stack.longs(renderCompleteSemaphores[idx])), renderFences[idx]), "Failed to submit command buffer");
+
+            _CHECK_(vkQueuePresentKHR(queue, VkPresentInfoKHR.mallocStack(stack)
+                    .pWaitSemaphores(stack.longs(renderCompleteSemaphores[idx]))
+                    .swapchainCount(1)
+                    .pSwapchains(stack.longs(swapChain.swapchain))
+                    .pImageIndices(stack.ints(imageIndex))), "Failed to present image");
+        }
+    }
+
+    private static void processFinishedFences() {
+        Iterator<Map.Entry<Long, Runnable>> it = waitingFenceActions.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<Long, Runnable> e = it.next();
+            if (vkGetFenceStatus(device, e.getKey()) == VK_SUCCESS) {
+                it.remove();
+                vkDestroyFence(device, e.getKey(), null);
+                e.getValue().run();
+            }
+        }
     }
 
     private static void freeCommandBuffers() {
