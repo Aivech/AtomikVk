@@ -187,6 +187,8 @@ private static VkDevice device = null;
             */
 
             while (!glfwWindowShouldClose(window)) {
+                if (!GLFWHelper.update()) continue;
+
 
                 glfwPollEvents();
             }

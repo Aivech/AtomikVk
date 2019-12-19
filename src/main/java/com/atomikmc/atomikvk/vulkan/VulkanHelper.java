@@ -37,6 +37,9 @@ public class VulkanHelper {
     private static VkCommandBuffer[] rasterCommandBuffers = null;
     private static long[] imageAcquireSemaphores = null;
     private static long[] renderCompleteSemaphores = null;
+    private static DeviceAndQueueFamilies deviceAndQueueFamilies = null;
+
+    private static int idx = 0;
 
     public static void setupVulkan(long window) {
         try (MemoryStack stack = stackPush()) {
@@ -74,7 +77,7 @@ public class VulkanHelper {
             PointerBuffer pPhysDevices = stack.mallocPointer(physDeviceCount);
             _CHECK_(vkEnumeratePhysicalDevices(vkInstance, pPhysicalDeviceCount, pPhysDevices), "Could not get physical devices!");
 
-            DeviceAndQueueFamilies deviceAndQueueFamilies = chooseGraphicsDevice(vkInstance, surface, physDeviceCount, pPhysDevices);
+            deviceAndQueueFamilies = chooseGraphicsDevice(vkInstance, surface, physDeviceCount, pPhysDevices);
 
             int queueFamily = deviceAndQueueFamilies.queuesFamilies.findSingleSuitableQueue();
 
@@ -124,6 +127,14 @@ public class VulkanHelper {
             vkDestroySurfaceKHR(vkInstance, surface, null);
         if (vkInstance != null)
             vkDestroyInstance(vkInstance, null);
+    }
+
+    public static void update(int w, int h) {
+        if (w != swapChain.width || h != swapChain.height) {
+            vkDeviceWaitIdle(device);
+            recreateOnResize();
+            idx = 0;
+        }
     }
 
     private static void freeCommandBuffers() {
@@ -431,6 +442,13 @@ public class VulkanHelper {
                 renderFences[i] = pFence.get(0);
             }
         }
+    }
+
+    private static void recreateOnResize() {
+        swapChain = createSwapChain(device, surface, deviceAndQueueFamilies, swapChain);
+        freeCommandBuffers();
+        framebuffers = createFramebuffers(device, swapChain, renderPass, framebuffers);
+        rasterCommandBuffers = createRasterCommandBuffers(device, swapChain, framebuffers, commandPool, renderPass);
     }
 
     private static boolean isExtensionEnabled(VkExtensionProperties.Buffer buf, String extension) {
