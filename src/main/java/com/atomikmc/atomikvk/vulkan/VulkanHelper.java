@@ -31,12 +31,12 @@ public class VulkanHelper {
     private static long surface = 0;
     private static SwapChain swapChain = null;
     private static long[] renderFences = null;
-    private static Long commandPool = null;
-    private static long renderPass;
-    private static long[] framebuffers;
-    private static VkCommandBuffer[] rasterCommandBuffers;
-    private static long[] imageAcquireSemaphores;
-    private static long[] renderCompleteSemaphores;
+    private static long commandPool = 0;
+    private static long renderPass = 0;
+    private static long[] framebuffers = null;
+    private static VkCommandBuffer[] rasterCommandBuffers = null;
+    private static long[] imageAcquireSemaphores = null;
+    private static long[] renderCompleteSemaphores = null;
 
     public static void setupVulkan(long window) {
         try (MemoryStack stack = stackPush()) {
@@ -83,25 +83,56 @@ public class VulkanHelper {
             swapChain = createSwapChain(device, surface, deviceAndQueueFamilies, swapChain);
 
             commandPool = createCommandPool(0, device, queueFamily);
-            long renderPass = createRasterRenderPass(device, swapChain);
-            long[] framebuffers = createFramebuffers(device, swapChain, renderPass, null);
-            VkCommandBuffer[] rasterCommandBuffers = createRasterCommandBuffers();
+            renderPass = createRasterRenderPass(device, swapChain);
+            framebuffers = createFramebuffers(device, swapChain, renderPass, null);
+            rasterCommandBuffers = createRasterCommandBuffers(device, swapChain, framebuffers, commandPool, renderPass);
+            createSyncObjects(device, swapChain);
         }
     }
 
     public static void cleanupVulkan() {
         _CHECK_(vkDeviceWaitIdle(device), "Failed to wait for device idle!");
 
-        for (int i = 0; i < swapChain.images.length; i++) {
-            vkDestroySemaphore(device, imageAcquireSemaphores[i], null);
-            vkDestroySemaphore(device, renderCompleteSemaphores[i], null);
-            vkDestroyFence(device, renderFences[i], null);
+        if (swapChain != null) {
+            for (int i = 0; i < swapChain.images.length; i++) {
+                if (imageAcquireSemaphores != null)
+                    vkDestroySemaphore(device, imageAcquireSemaphores[i], null);
+                if (renderCompleteSemaphores != null)
+                    vkDestroySemaphore(device, renderCompleteSemaphores[i], null);
+                if (renderFences != null)
+                    vkDestroyFence(device, renderFences[i], null);
+            }
+
+            if (rasterCommandBuffers != null)
+                freeCommandBuffers();
+
+            swapChain.free(device);
+
+            if (framebuffers != null)
+                for (long framebuffer : framebuffers)
+                    vkDestroyFramebuffer(device, framebuffer, null);
+
+            if (renderPass != 0)
+                vkDestroyRenderPass(device, renderPass, null);
+            if (commandPool != 0)
+                vkDestroyCommandPool(device, commandPool, null);
         }
 
-        swapChain.free(device);
-        vkDestroyDevice(device, null);
-        vkDestroySurfaceKHR(vkInstance, surface, null);
-        vkDestroyInstance(vkInstance, null);
+        if (device != null)
+            vkDestroyDevice(device, null);
+        if (surface != 0)
+            vkDestroySurfaceKHR(vkInstance, surface, null);
+        if (vkInstance != null)
+            vkDestroyInstance(vkInstance, null);
+    }
+
+    private static void freeCommandBuffers() {
+        try (MemoryStack stack = stackPush()) {
+            PointerBuffer pCommandBuffers = stack.mallocPointer(rasterCommandBuffers.length);
+            for (VkCommandBuffer cb : rasterCommandBuffers)
+                pCommandBuffers.put(cb);
+            vkFreeCommandBuffers(device, commandPool, pCommandBuffers.flip());
+        }
     }
 
     private static DeviceAndQueueFamilies chooseGraphicsDevice(VkInstance vkInstance, long surface, int physDeviceCount, PointerBuffer pPhysDevices) {
@@ -343,9 +374,62 @@ public class VulkanHelper {
         }
     }
 
-    private static VkCommandBuffer[] createRasterCommandBuffers() {
+    private static VkCommandBuffer[] createRasterCommandBuffers(VkDevice device, SwapChain swapchain, long[] framebuffers, long commandPool, long renderPass) {
         try (MemoryStack stack = stackPush()) {
+            VkClearValue.Buffer clearValues = VkClearValue.mallocStack(1, stack);
+            clearValues.apply(0, v -> v.color().float32(0, 0.5f).float32(1, 0.7f).float32(2, 0.9f).float32(3, 1));
 
+            VkRenderPassBeginInfo renderPassBeginInfo = VkRenderPassBeginInfo.mallocStack(stack).renderPass(renderPass)
+                    .pClearValues(clearValues)
+                    .renderArea(a -> a.extent().set(swapchain.width, swapchain.height));
+
+            VkCommandBuffer[] cmdBuffers = createCommandBuffers(device, commandPool, swapchain.images.length);
+            for (int i = 0; i < swapchain.images.length; i++) {
+                renderPassBeginInfo.framebuffer(framebuffers[i]);
+                VkCommandBuffer cmdBuffer = cmdBuffers[i];
+                vkCmdBeginRenderPass(cmdBuffer, renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+                vkCmdEndRenderPass(cmdBuffer);
+                _CHECK_(vkEndCommandBuffer(cmdBuffer), "Failed to end command buffer");
+            }
+            return cmdBuffers;
+        }
+    }
+
+    private static VkCommandBuffer[] createCommandBuffers(VkDevice device, long pool, int count) {
+        try (MemoryStack stack = stackPush()) {
+            PointerBuffer pCommandBuffers = stack.mallocPointer(count);
+            _CHECK_(vkAllocateCommandBuffers(device, VkCommandBufferAllocateInfo.mallocStack(stack)
+                    .commandBufferCount(count)
+                    .commandPool(pool)
+                    .level(VK_COMMAND_BUFFER_LEVEL_PRIMARY), pCommandBuffers), "Failed to create command buffers");
+            VkCommandBuffer[] cmdBuffers = new VkCommandBuffer[count];
+            for (int i = 0; i < count; i++) {
+                cmdBuffers[i] = new VkCommandBuffer(pCommandBuffers.get(i), device);
+                _CHECK_(vkBeginCommandBuffer(cmdBuffers[i], VkCommandBufferBeginInfo.mallocStack(stack)), "Failed to begin command buffers!");
+            }
+            return cmdBuffers;
+        }
+    }
+
+    private static void createSyncObjects(VkDevice device, SwapChain swapchain) {
+        imageAcquireSemaphores = new long[swapchain.images.length];
+        renderCompleteSemaphores = new long[swapchain.images.length];
+        renderFences = new long[swapchain.images.length];
+
+        for (int i = 0; i < swapchain.images.length; i++) {
+            try (MemoryStack stack = stackPush()) {
+                LongBuffer pSemaphore = stack.mallocLong(1);
+                _CHECK_(vkCreateSemaphore(device, VkSemaphoreCreateInfo.mallocStack(stack), null, pSemaphore),
+                        "Failed to create image acquire semaphore");
+                imageAcquireSemaphores[i] = pSemaphore.get(0);
+                _CHECK_(vkCreateSemaphore(device, VkSemaphoreCreateInfo.mallocStack(stack), null, pSemaphore),
+                        "Failed to create raster semaphore");
+                renderCompleteSemaphores[i] = pSemaphore.get(0);
+                LongBuffer pFence = stack.mallocLong(1);
+                _CHECK_(vkCreateFence(device, VkFenceCreateInfo.mallocStack(stack).flags(VK_FENCE_CREATE_SIGNALED_BIT), null,
+                        pFence), "Failed to create fence");
+                renderFences[i] = pFence.get(0);
+            }
         }
     }
 
