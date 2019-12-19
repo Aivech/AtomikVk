@@ -293,7 +293,8 @@ public class VulkanHelper {
             _CHECK_(vkGetPhysicalDeviceSurfacePresentModesKHR(deviceAndQueueFamilies.physicalDevice, surface, count, pPresentModes),
                     "Failed to get presentation modes");
 
-            int imageCount = min(surfCaps.minImageCount() + 1, surfCaps.maxImageCount());
+
+            int imageCount = surfCaps.maxImageCount() == surfCaps.minImageCount() ? surfCaps.minImageCount() : surfCaps.minImageCount() + 1;
 
             ColorFormatAndSpace surfaceFormat = determineSurfaceFormat(deviceAndQueueFamilies.physicalDevice, surface);
 
@@ -329,9 +330,9 @@ public class VulkanHelper {
             long[] images = new long[pImageCount.get(0)];
             long[] imageViews = new long[pImageCount.get(0)];
             pSwapchainImages.get(images, 0, images.length);
-            LongBuffer pImageView = stack.mallocLong(1);
+            LongBuffer pImageView = stack.callocLong(1);
             for (int i = 0; i < pImageCount.get(0); i++) {
-                _CHECK_(vkCreateImageView(device, VkImageViewCreateInfo.mallocStack(stack)
+                _CHECK_(vkCreateImageView(device, VkImageViewCreateInfo.callocStack(stack)
                         .format(surfaceFormat.colorFormat)
                         .viewType(VK_IMAGE_TYPE_2D)
                         .subresourceRange(r -> r.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).layerCount(1).levelCount(1))
