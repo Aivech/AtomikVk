@@ -46,7 +46,7 @@ public class GLFWHelper {
             throw new AssertionError("No window!");
         }
 
-        provider.init();
+        provider.init(window);
 
         return window;
     }

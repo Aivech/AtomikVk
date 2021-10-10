@@ -10,14 +10,14 @@ import org.lwjgl.vulkan.*;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.OptionalInt;
-import java.util.Queue;
+import java.util.Set;
 
 import static org.lwjgl.vulkan.EXTDebugReport.VK_ERROR_VALIDATION_FAILED_EXT;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.KHRDisplaySwapchain.VK_ERROR_INCOMPATIBLE_DISPLAY_KHR;
-import static org.lwjgl.vulkan.KHRSurface.VK_ERROR_NATIVE_WINDOW_IN_USE_KHR;
-import static org.lwjgl.vulkan.KHRSurface.VK_ERROR_SURFACE_LOST_KHR;
+import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.VK_ERROR_OUT_OF_DATE_KHR;
 import static org.lwjgl.vulkan.KHRSwapchain.VK_SUBOPTIMAL_KHR;
 import static org.lwjgl.vulkan.VK10.*;
@@ -30,15 +30,17 @@ public class Vulkan implements GraphicsProvider {
 
     private VkInstance instance;
     private long vkDebugUtilsMessenger;
+    private long surfaceKHR;
     private VkPhysicalDevice gpu;
     private VkDevice device;
     private VkQueue graphicsQueue;
+    private VkQueue presentationQueue;
 
     @Override
-    public void init() {
+    public void init(long window) {
         createInstance();
         setupDebugMessenger();
-        createSurface();
+        createSurface(window);
         chooseGPU();
         createLogicalDevice();
         getQueues();
@@ -51,7 +53,8 @@ public class Vulkan implements GraphicsProvider {
 
     @Override
     public void cleanup() {
-        vkDestroyDevice(device,null);
+        if (device != null) vkDestroyDevice(device, null);
+        vkDestroySurfaceKHR(instance, surfaceKHR, null);
         EXTDebugUtils.vkDestroyDebugUtilsMessengerEXT(instance, vkDebugUtilsMessenger, null);
         vkDestroyInstance(instance, null);
     }
@@ -137,26 +140,31 @@ public class Vulkan implements GraphicsProvider {
         }
     }
 
-    private void createSurface() {
+    private void createSurface(long window) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            LongBuffer pSurface = stack.mallocLong(1);
+            _CHECK_(GLFWVulkan.glfwCreateWindowSurface(instance, window, null, pSurface), "Failed to create window surface!");
+            surfaceKHR = pSurface.get(0);
+        }
 
     }
 
     private void chooseGPU() {
-        try(MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
             IntBuffer pPhysDeviceCount = stack.mallocInt(1);
-            vkEnumeratePhysicalDevices(instance,pPhysDeviceCount,null);
+            vkEnumeratePhysicalDevices(instance, pPhysDeviceCount, null);
             int physDeviceCount = pPhysDeviceCount.get(0);
-            if (physDeviceCount == 0) throw(new RuntimeException("No Vulkan-compatible devices!"));
+            if (physDeviceCount == 0) throw (new RuntimeException("No Vulkan-compatible devices!"));
 
             PointerBuffer pPhysicalDevices = stack.mallocPointer(physDeviceCount);
             vkEnumeratePhysicalDevices(instance, pPhysDeviceCount, pPhysicalDevices);
             ArrayList<VkPhysicalDevice> devices = new ArrayList<>();
-            for(int i = 0; i < physDeviceCount; i++) {
+            for (int i = 0; i < physDeviceCount; i++) {
                 devices.add(new VkPhysicalDevice(pPhysicalDevices.get(i), instance));
             }
 
             int score = 0;
-            for(VkPhysicalDevice device : devices) {
+            for (VkPhysicalDevice device : devices) {
                 int deviceScore = evaluateDevice(device);
                 if (deviceScore > score) {
                     score = deviceScore;
@@ -172,16 +180,16 @@ public class Vulkan implements GraphicsProvider {
     }
 
     private void createLogicalDevice() {
-        try(MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
             VkPhysicalDeviceFeatures features = VkPhysicalDeviceFeatures.callocStack(stack);
 
-            VkDeviceQueueCreateInfo.Buffer queueCreateInfos = VkDeviceQueueCreateInfo.callocStack(1,stack);
+            VkDeviceQueueCreateInfo.Buffer queueCreateInfos = VkDeviceQueueCreateInfo.callocStack(1, stack);
             VkDeviceQueueCreateInfo graphicsQueueInfo = queueCreateInfos.get(0);
             graphicsQueueInfo.sType(VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO)
                     .queueFamilyIndex(QueueFamilies.graphicsFamily.getAsInt()) // always present, we checked earlier
                     .pQueuePriorities(stack.floats(1.0f));
 
-            queueCreateInfos.put(0,graphicsQueueInfo);
+            queueCreateInfos.put(0, graphicsQueueInfo);
             queueCreateInfos.rewind();
 
             VkDeviceCreateInfo createInfo = VkDeviceCreateInfo.callocStack(stack);
@@ -189,16 +197,21 @@ public class Vulkan implements GraphicsProvider {
                     .pEnabledFeatures(features);
 
             PointerBuffer pVkDevice = stack.mallocPointer(1);
-            _CHECK_(vkCreateDevice(gpu,createInfo,null, pVkDevice), "Failed to create logical device!");
-            device = new VkDevice(pVkDevice.get(0),gpu,createInfo);
+            _CHECK_(vkCreateDevice(gpu, createInfo, null, pVkDevice), "Failed to create logical device!");
+            device = new VkDevice(pVkDevice.get(0), gpu, createInfo);
         }
     }
 
     private void getQueues() {
-        try(MemoryStack stack = MemoryStack.stackPush()) {
-            PointerBuffer pQueue = stack.mallocPointer(1);
-            vkGetDeviceQueue(device,QueueFamilies.graphicsFamily.getAsInt(),0,pQueue);
-            graphicsQueue = new VkQueue(pQueue.get(0),device);
+        // TODO: don't make duplicate queues if the presentation and graphics queue are the same
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            PointerBuffer pGraphQueue = stack.mallocPointer(1);
+            vkGetDeviceQueue(device, QueueFamilies.graphicsFamily.getAsInt(), 0, pGraphQueue);
+            graphicsQueue = new VkQueue(pGraphQueue.get(0), device);
+
+            PointerBuffer pPresentQueue = stack.mallocPointer(1);
+            vkGetDeviceQueue(device, QueueFamilies.presentationFamily.getAsInt(),0,pPresentQueue);
+            presentationQueue = new VkQueue(pPresentQueue.get(0),device);
         }
     }
 
@@ -237,7 +250,7 @@ public class Vulkan implements GraphicsProvider {
     }
 
     private int evaluateDevice(VkPhysicalDevice device) {
-        try(MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
             int score = 1;
 
             VkPhysicalDeviceProperties properties = VkPhysicalDeviceProperties.callocStack(stack);
@@ -249,7 +262,7 @@ public class Vulkan implements GraphicsProvider {
             findQueueFamilies(device);
 
             // mandatory features
-            if(!features.geometryShader() || QueueFamilies.graphicsFamily.isEmpty()) {
+            if (!features.geometryShader() || !QueueFamilies.isComplete()) {
                 return -1; // a score of -1 will never be chosen, indicating an unsuitable device
             }
 
@@ -260,23 +273,30 @@ public class Vulkan implements GraphicsProvider {
 
             // TODO: add actual requirements - for now, nearly anything will do
 
-            AtomikVk.LOGGER.debug("Found candidate device "+properties.deviceNameString()+" with score = "+score);
+            AtomikVk.LOGGER.debug("Found candidate device " + properties.deviceNameString() + " with score = " + score);
             return score;
         }
     }
 
     private void findQueueFamilies(VkPhysicalDevice device) {
-        try(MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
             IntBuffer pQueueFamilyCount = stack.mallocInt(1);
-            vkGetPhysicalDeviceQueueFamilyProperties(device,pQueueFamilyCount,null);
-            VkQueueFamilyProperties.Buffer queueFamilies = VkQueueFamilyProperties.callocStack(pQueueFamilyCount.get(0),stack);
-            vkGetPhysicalDeviceQueueFamilyProperties(device,pQueueFamilyCount,queueFamilies);
+            vkGetPhysicalDeviceQueueFamilyProperties(device, pQueueFamilyCount, null);
+            VkQueueFamilyProperties.Buffer queueFamilies = VkQueueFamilyProperties.callocStack(pQueueFamilyCount.get(0), stack);
+            vkGetPhysicalDeviceQueueFamilyProperties(device, pQueueFamilyCount, queueFamilies);
 
-            for(int i = 0; i < pQueueFamilyCount.get(0); i++) {
+            for (int i = 0; i < pQueueFamilyCount.get(0); i++) {
                 VkQueueFamilyProperties family = queueFamilies.get();
-                if((family.queueFlags() & VK_QUEUE_GRAPHICS_BIT) != 0) {
+                if ((family.queueFlags() & VK_QUEUE_GRAPHICS_BIT) != 0) {
                     QueueFamilies.graphicsFamily = OptionalInt.of(i);
                 }
+
+                IntBuffer presentSupport = stack.mallocInt(1);
+                vkGetPhysicalDeviceSurfaceSupportKHR(device,i,surfaceKHR,presentSupport);
+                if(presentSupport.get(0) == 1) {
+                    QueueFamilies.presentationFamily = OptionalInt.of(i);
+                }
+                if(QueueFamilies.isComplete()) break;
             }
         }
     }
@@ -323,6 +343,10 @@ public class Vulkan implements GraphicsProvider {
     // java structs when
     private class QueueFamilies {
         private static OptionalInt graphicsFamily = OptionalInt.empty();
+        private static OptionalInt presentationFamily = OptionalInt.empty();
 
+        private static boolean isComplete() {
+            return graphicsFamily.isPresent() && presentationFamily.isPresent();
+        }
     }
 }

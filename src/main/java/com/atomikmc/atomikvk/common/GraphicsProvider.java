@@ -3,7 +3,7 @@ package com.atomikmc.atomikvk.common;
 import java.nio.IntBuffer;
 
 public interface GraphicsProvider {
-    void init();
+    void init(long window);
     void update(IntBuffer pImageIndex, int w, int h);
     void cleanup();
 
