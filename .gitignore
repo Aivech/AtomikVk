@@ -4,3 +4,8 @@
 /build/classes/java/main/
 /.idea/
 *.log
+/run/
+javacore*
+jitdump*
+Snap*
+/.tool-versions

@@ -6,11 +6,11 @@ import org.apache.logging.log4j.Logger;
 
 public class AtomikVk {
 
-    public static Logger logger = LogManager.getLogger("AtomikVk");
+    public static final Logger LOGGER = LogManager.getLogger("AtomikVk");
 
     public static void main(String[] args) {
         try {
-            long window = GLFWHelper.glfwSetup();
+            long window = GLFWHelper.glfwSetupWindow();
             GLFWHelper.startWindowLoop();
 
         } finally {
