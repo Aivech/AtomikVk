@@ -7,5 +7,6 @@
 /run/
 javacore*
 jitdump*
+heapdump*
 Snap*
 /.tool-versions

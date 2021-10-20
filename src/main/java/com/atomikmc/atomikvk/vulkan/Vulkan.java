@@ -205,6 +205,7 @@ public class Vulkan implements GraphicsProvider {
     private void getQueues() {
         // TODO: don't make duplicate queues if the presentation and graphics queue are the same
         try (MemoryStack stack = MemoryStack.stackPush()) {
+            // Both optionals have already been checked
             PointerBuffer pGraphQueue = stack.mallocPointer(1);
             vkGetDeviceQueue(device, QueueFamilies.graphicsFamily.getAsInt(), 0, pGraphQueue);
             graphicsQueue = new VkQueue(pGraphQueue.get(0), device);
