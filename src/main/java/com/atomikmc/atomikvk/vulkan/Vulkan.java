@@ -6,6 +6,7 @@ import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWVulkan;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
@@ -34,7 +35,7 @@ public class Vulkan implements GraphicsProvider {
     private VkDevice device;
     private VkQueue graphicsQueue;
     private VkQueue presentationQueue;
-    private long pSwapchain;
+    private Swapchain swapchain;
 
     @Override
     public void init(long window) {
@@ -44,7 +45,8 @@ public class Vulkan implements GraphicsProvider {
         chooseGPU();
         createLogicalDevice();
         getQueues();
-        createSwapChain(window);
+        swapchain = new com.atomikmc.atomikvk.vulkan.Swapchain(window, gpu, device, surfaceKHR,
+                QueueFamilies.graphicsFamily.getAsInt(), QueueFamilies.presentationFamily.getAsInt());
     }
 
     @Override
@@ -54,7 +56,7 @@ public class Vulkan implements GraphicsProvider {
 
     @Override
     public void cleanup() {
-        vkDestroySwapchainKHR(device, pSwapchain, null);
+        swapchain.destroy(device);
         if (device != null) vkDestroyDevice(device, null);
         vkDestroySurfaceKHR(instance, surfaceKHR, null);
         EXTDebugUtils.vkDestroyDebugUtilsMessengerEXT(instance, vkDebugUtilsMessenger, null);
@@ -225,47 +227,6 @@ public class Vulkan implements GraphicsProvider {
         }
     }
 
-    // where memory safety goes to die
-    private void createSwapChain(long glfwWindow) {
-        try(MemoryStack stack = MemoryStack.stackPush()) {
-            SwapchainSupportDetails supportDetails = new SwapchainSupportDetails(gpu, stack);
-            VkSurfaceFormatKHR surfaceFormatKHR = supportDetails.chooseSurfaceFormat();
-            int presentModeKHR = supportDetails.choosePresentModeIfAvailable(VK_PRESENT_MODE_MAILBOX_KHR);
-            VkExtent2D extent = supportDetails.chooseSwapExtent(glfwWindow, stack);
-            int imageCount = supportDetails.capabilities.minImageCount()+1;
-            if (supportDetails.capabilities.minImageCount() > 0 && imageCount > supportDetails.capabilities.maxImageCount()) {
-                imageCount = supportDetails.capabilities.maxImageCount();
-            }
-
-            VkSwapchainCreateInfoKHR createInfo = VkSwapchainCreateInfoKHR.callocStack(stack)
-                    .sType(VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR)
-                    .surface(surfaceKHR)
-                    .imageFormat(surfaceFormatKHR.format())
-                    .imageColorSpace(surfaceFormatKHR.colorSpace())
-                    .imageExtent(extent)
-                    .minImageCount(imageCount)
-                    .imageArrayLayers(1) // values >1 used for VR
-                    .imageUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-
-            if(QueueFamilies.graphicsFamily.getAsInt() != QueueFamilies.presentationFamily.getAsInt()) {
-                createInfo.imageSharingMode(VK_SHARING_MODE_CONCURRENT);
-            } else {
-                createInfo.imageSharingMode(VK_SHARING_MODE_EXCLUSIVE);
-            }
-            createInfo.preTransform(supportDetails.capabilities.currentTransform()); // do nothing
-            createInfo.compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR); // window is not transparent
-            createInfo.presentMode(presentModeKHR);
-            createInfo.clipped(true); // do not draw under other windows
-            createInfo.oldSwapchain(VK_NULL_HANDLE); // used to hold a new swapchain if we resize the window or etc.
-
-            LongBuffer ppSwapchain = stack.mallocLong(1);
-            _CHECK_(vkCreateSwapchainKHR(device, createInfo, null, ppSwapchain), "Failed to create swapchain!");
-
-            pSwapchain = ppSwapchain.get(0);
-
-        }
-    }
-
     public static int VkDebugMessengerCallback(int messageSeverity, int messageTypes, long pCallbackData, long pUserData) {
         VkDebugUtilsMessengerCallbackDataEXT data = VkDebugUtilsMessengerCallbackDataEXT.create(pCallbackData);
         AtomikVk.LOGGER.error("VK DEBUG: " + data.pMessageString());
@@ -319,8 +280,7 @@ public class Vulkan implements GraphicsProvider {
             if (!features.geometryShader() || !QueueFamilies.isComplete() || !requiredExtensions ) {
                 return -1; // a score of -1 will never be chosen, indicating an unsuitable device
             }
-            SwapchainSupportDetails swapchainDetails = new SwapchainSupportDetails(device, stack); // must be checked after extension support
-            if(!swapchainDetails.isAdequate()) return -1;
+            if(!Swapchain.verifyDeviceSupport(device, surfaceKHR)) return -1;
 
             // optional features
             if (properties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
@@ -421,74 +381,6 @@ public class Vulkan implements GraphicsProvider {
 
         private static boolean isComplete() {
             return graphicsFamily.isPresent() && presentationFamily.isPresent();
-        }
-    }
-
-    private class SwapchainSupportDetails {
-        // !!!! WARNING !!!!: DO NOT RETURN THIS OBJECT FROM A SCOPE. UNDEFINED BEHAVIOR **WILL** OCCUR.
-        VkSurfaceCapabilitiesKHR capabilities;
-        VkSurfaceFormatKHR.Buffer formats;
-        IntBuffer pPresentModes;
-        private SwapchainSupportDetails(VkPhysicalDevice gpu, MemoryStack stack) {
-            capabilities = VkSurfaceCapabilitiesKHR.callocStack(stack);
-            vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surfaceKHR, capabilities);
-
-            IntBuffer pFormatCount = stack.mallocInt(1);
-            vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surfaceKHR, pFormatCount, null);
-            if(pFormatCount.get(0) != 0) {
-                formats = VkSurfaceFormatKHR.callocStack(pFormatCount.get(0), stack);
-                pFormatCount.rewind();
-                vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surfaceKHR, pFormatCount, formats);
-            }
-
-            IntBuffer pPresentModeCount = stack.mallocInt(1);
-            vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surfaceKHR, pPresentModeCount, null);
-            if(pPresentModeCount.get(0) != 0) {
-                pPresentModes = stack.mallocInt(pPresentModeCount.get(0));
-                vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surfaceKHR, pPresentModeCount.rewind(), pPresentModes);
-            }
-        }
-
-        private boolean isAdequate() {
-            return formats != null && pPresentModes != null;
-        }
-
-        VkSurfaceFormatKHR chooseSurfaceFormat() {
-            for (VkSurfaceFormatKHR format : formats) {
-                AtomikVk.LOGGER.error("DEBUG: FormatSurfaceKHR: "+ format.format() + " ColorSpace: "+format.colorSpace());
-                if (format.format() == VK_FORMAT_B8G8R8_SRGB && format.colorSpace() == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-                    formats.rewind();
-                    return format;
-                }
-            }
-            AtomikVk.LOGGER.error("DEBUG: preferred format not found");
-            formats.rewind();
-            return formats.get(0);
-        }
-
-        int choosePresentModeIfAvailable(int vkPresentModeKHR) {
-            while(pPresentModes.hasRemaining()) {
-                int mode = pPresentModes.get();
-                if (mode == vkPresentModeKHR) {
-                    pPresentModes.rewind();
-                    return mode;
-                }
-            }
-            pPresentModes.rewind();
-            return VK_PRESENT_MODE_FIFO_KHR;
-        }
-
-        VkExtent2D chooseSwapExtent(long glfwWindow, MemoryStack stack) {
-            if(capabilities.currentExtent().width() != -1) {
-                return capabilities.currentExtent();
-            } else {
-                IntBuffer pWidth = stack.mallocInt(1);
-                IntBuffer pHeight = stack.mallocInt(1);
-                GLFW.glfwGetFramebufferSize(glfwWindow, pWidth, pHeight);
-                int width = Math.min(Math.max(capabilities.minImageExtent().width(), pWidth.get(0)), capabilities.maxImageExtent().width());
-                int height = Math.min(Math.max(capabilities.minImageExtent().height(), pHeight.get(0)), capabilities.maxImageExtent().height());
-                return VkExtent2D.callocStack(stack).set(width, height);
-            }
         }
     }
 }
