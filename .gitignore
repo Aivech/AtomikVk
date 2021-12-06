@@ -10,3 +10,4 @@ jitdump*
 heapdump*
 Snap*
 /.tool-versions
+/out/
