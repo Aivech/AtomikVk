@@ -1,6 +1,7 @@
 package com.atomikmc.atomikvk.vulkan;
 
 import com.atomikmc.atomikvk.AtomikVk;
+import com.google.common.collect.ImmutableList;
 import com.google.common.primitives.ImmutableIntArray;
 import com.google.common.primitives.ImmutableLongArray;
 import org.lwjgl.glfw.GLFW;
@@ -23,6 +24,8 @@ class Swapchain {
     private final VkSurfaceFormatKHR format;
     private final VkExtent2D extent;
     private final Details details;
+    private final ImmutableLongArray imageViews;
+
 
     Swapchain(long glfwWindow, VkPhysicalDevice gpu, VkDevice device, long vkSurface, int graphicsFamily, int presentationFamily) {
         try(MemoryStack stack = stackPush()) {
@@ -66,6 +69,29 @@ class Swapchain {
                 temp.add(ppVkImages.get());
             }
             images = temp.build();
+
+            ImmutableLongArray.Builder views = ImmutableLongArray.builder(images.length());
+            for (long image: images.asList()) {
+                try(MemoryStack stack2 = stackPush()) {
+                    VkImageViewCreateInfo viewCreateInfo = VkImageViewCreateInfo.callocStack(stack)
+                            .sType(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO)
+                            .image(image)
+                            .viewType(VK_IMAGE_TYPE_2D)
+                            .format(format.format());
+                    viewCreateInfo.components().set(VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY);
+                    viewCreateInfo.subresourceRange().set(
+                            VK_IMAGE_ASPECT_COLOR_BIT,
+                            0,
+                            1,
+                            0,
+                            1
+                    );
+                    LongBuffer ppImageView = stack.mallocLong(1);
+                    _CHECK_(vkCreateImageView(device, viewCreateInfo, null, ppImageView), "failed to create image views!");
+                    views.add(ppImageView.get(0));
+                }
+            }
+            imageViews = views.build();
         }
     }
 
@@ -74,6 +100,9 @@ class Swapchain {
     }
 
     void destroy(VkDevice device) {
+        for(long imageView: imageViews.asList()) {
+            vkDestroyImageView(device, imageView, null);
+        }
         details.destroy();
         vkDestroySwapchainKHR(device, pSwapchain, null);
     }

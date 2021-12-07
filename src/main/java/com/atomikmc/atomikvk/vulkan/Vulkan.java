@@ -47,6 +47,7 @@ public class Vulkan implements GraphicsProvider {
         getQueues();
         swapchain = new com.atomikmc.atomikvk.vulkan.Swapchain(window, gpu, device, surfaceKHR,
                 QueueFamilies.graphicsFamily.getAsInt(), QueueFamilies.presentationFamily.getAsInt());
+        createGraphicsPipeline();
     }
 
     @Override
@@ -225,6 +226,10 @@ public class Vulkan implements GraphicsProvider {
             vkGetDeviceQueue(device, QueueFamilies.presentationFamily.getAsInt(),0,pPresentQueue);
             presentationQueue = new VkQueue(pPresentQueue.get(0),device);
         }
+    }
+
+    private void createGraphicsPipeline() {
+
     }
 
     public static int VkDebugMessengerCallback(int messageSeverity, int messageTypes, long pCallbackData, long pUserData) {
