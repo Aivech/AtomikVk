@@ -2,6 +2,7 @@ package com.atomikmc.atomikvk.vulkan;
 
 import com.atomikmc.atomikvk.AtomikVk;
 import com.atomikmc.atomikvk.common.GraphicsProvider;
+import com.atomikmc.atomikvk.shaderc.SpirVCompiler;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWVulkan;
@@ -229,7 +230,14 @@ public class Vulkan implements GraphicsProvider {
     }
 
     private void createGraphicsPipeline() {
+        try(SpirVCompiler compiler = new SpirVCompiler()) {
+            try(MemoryStack stack = MemoryStack.stackPush()) {
+                var createInfo = VkShaderModuleCreateInfo.callocStack(stack)
+                        .sType(VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO)
+                        .pCode();
 
+            }
+        }
     }
 
     public static int VkDebugMessengerCallback(int messageSeverity, int messageTypes, long pCallbackData, long pUserData) {
