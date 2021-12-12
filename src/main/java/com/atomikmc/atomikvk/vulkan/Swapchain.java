@@ -99,6 +99,13 @@ class Swapchain {
         return pSwapchain;
     }
 
+    int width() { return extent.width(); }
+    int height() { return extent.height(); }
+
+    VkExtent2D getExtent() { return extent; }
+
+    int getImageFormat() { return this.format.format(); }
+
     void destroy(VkDevice device) {
         for(long imageView: imageViews.asList()) {
             vkDestroyImageView(device, imageView, null);

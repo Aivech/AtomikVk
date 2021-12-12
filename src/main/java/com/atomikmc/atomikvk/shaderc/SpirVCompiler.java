@@ -8,7 +8,7 @@ import java.nio.file.Files;
 import static org.lwjgl.util.shaderc.Shaderc.*;
 
 public class SpirVCompiler implements AutoCloseable {
-    private static final String ENTRY_POINT = "main";
+    public static final String GLSL_ENTRY_POINT = "main";
 
     private final long shaderc_compiler;
     private final long shaderc_compile_options;
@@ -35,7 +35,7 @@ public class SpirVCompiler implements AutoCloseable {
         ShaderType type = getShaderType(inputFile.getName());
         shaderc_compile_options_set_include_callbacks(this.shaderc_compile_options, includeResolver, new IncludeResolver.Releaser(),0);
 
-        long spirV = shaderc_compile_into_spv(shaderc_compiler, glsl, type.shadercGlslType, inputFile.getName(), ENTRY_POINT, shaderc_compile_options);
+        long spirV = shaderc_compile_into_spv(shaderc_compiler, glsl, type.shadercGlslType, inputFile.getName(), GLSL_ENTRY_POINT, shaderc_compile_options);
         checkResult(spirV, shaderc_result_get_compilation_status(spirV));
 
         return new Result(spirV, type);
