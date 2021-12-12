@@ -7,6 +7,7 @@ import com.atomikmc.atomikvk.shaderc.SpirVCompiler;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFWVulkan;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
 import java.io.File;
@@ -38,7 +39,12 @@ public class Vulkan implements GraphicsProvider {
     private VkQueue presentationQueue;
     private Swapchain swapchain;
     private Pipeline pipeline;
-
+    private long[] framebuffers;
+    private long commandPool;
+    private VkCommandBuffer[] commandBuffers;
+    private long imageAvailableSemaphore;
+    private long renderFinishedSemaphore;
+    private int[] currentFrame = new int[1];
 
     @Override
     public void init(long window) {
@@ -51,6 +57,37 @@ public class Vulkan implements GraphicsProvider {
         swapchain = new com.atomikmc.atomikvk.vulkan.Swapchain(window, gpu, device, surfaceKHR,
                 QueueFamilies.graphicsFamily.getAsInt(), QueueFamilies.presentationFamily.getAsInt());
         createGraphicsPipeline();
+        createFramebuffers();
+        createCommandPool();
+        createCommandBuffers();
+        createSemaphores();
+        AtomikVk.LOGGER.error("There are n framebuffers: "+framebuffers.length);
+    }
+    @Override
+    public void drawFrame() {
+        vkAcquireNextImageKHR(device, swapchain.swapchain(), -1, imageAvailableSemaphore, VK_NULL_HANDLE, currentFrame);
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            LongBuffer waitSemaphore = stack.mallocLong(1).put(imageAvailableSemaphore).rewind();
+            LongBuffer signalSemaphore = stack.mallocLong(1).put(renderFinishedSemaphore).rewind();
+            IntBuffer waitStages = MemoryUtil.memAllocInt(1).put(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT).rewind();
+            var frameSubmitInfo = VkSubmitInfo.calloc(stack)
+                    .sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
+                    .waitSemaphoreCount(1)
+                    .pWaitSemaphores(waitSemaphore)
+                    .pWaitDstStageMask(waitStages)
+                    .pSignalSemaphores(signalSemaphore)
+                    .pCommandBuffers(stack.mallocPointer(1).put(commandBuffers[currentFrame[0]].address()).rewind());
+            _CHECK_(vkQueueSubmit(graphicsQueue,  frameSubmitInfo, VK_NULL_HANDLE), "failed to submit draw command buffer");
+            var presentInfo = VkPresentInfoKHR.calloc(stack)
+                    .sType(VK_STRUCTURE_TYPE_PRESENT_INFO_KHR)
+                    .pWaitSemaphores(signalSemaphore.rewind())
+                    .swapchainCount(1)
+                    .pSwapchains(stack.mallocLong(1).put(swapchain.swapchain()).rewind())
+                    .pImageIndices(stack.mallocInt(1).put(currentFrame[0]).rewind());
+
+            vkQueuePresentKHR(presentationQueue, presentInfo);
+
+        }
     }
 
     @Override
@@ -60,6 +97,15 @@ public class Vulkan implements GraphicsProvider {
 
     @Override
     public void cleanup() {
+        vkDeviceWaitIdle(device);
+        vkDestroySemaphore(device, imageAvailableSemaphore, null);
+        vkDestroySemaphore(device, renderFinishedSemaphore, null);
+        vkDestroyCommandPool(device, commandPool, null);
+
+        for(int i = 0; i < framebuffers.length; i++) {
+            vkDestroyFramebuffer(device, framebuffers[i], null);
+        }
+
         pipeline.destroy(device);
         swapchain.destroy(device);
         if (device != null) vkDestroyDevice(device, null);
@@ -243,6 +289,94 @@ public class Vulkan implements GraphicsProvider {
         }
     }
 
+    private void createFramebuffers() {
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            framebuffers = new long[swapchain.imageViews.length()];
+            for(int i = 0; i < framebuffers.length; i++) {
+                LongBuffer imageView = stack.mallocLong(1).put(swapchain.imageViews.get(i)).rewind();
+                var framebufferInfo = VkFramebufferCreateInfo.calloc(stack)
+                        .sType(VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO)
+                        .renderPass(pipeline.getRenderPass())
+                        .attachmentCount(1)
+                        .pAttachments(imageView)
+                        .width(swapchain.width())
+                        .height(swapchain.height())
+                        .layers(1);
+
+                LongBuffer pp_framebuffer = stack.mallocLong(1);
+                _CHECK_(vkCreateFramebuffer(device, framebufferInfo, null, pp_framebuffer),"Failed to create framebuffer on index " + i);
+                framebuffers[i] = pp_framebuffer.get(0);
+            }
+        }
+    }
+
+    private void createCommandPool() {
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            var createInfo = VkCommandPoolCreateInfo.calloc(stack)
+                    .sType(VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO)
+                    .queueFamilyIndex(QueueFamilies.graphicsFamily.getAsInt());
+            var pp_commandPool = stack.mallocLong(1);
+            _CHECK_(vkCreateCommandPool(device, createInfo, null, pp_commandPool), "Failed to create command pool.");
+            commandPool = pp_commandPool.get(0);
+        }
+    }
+
+    private void createCommandBuffers() {
+        commandBuffers = new VkCommandBuffer[framebuffers.length];
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            var allocInfo = VkCommandBufferAllocateInfo.calloc(stack)
+                    .sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO)
+                    .commandPool(commandPool)
+                    .level(VK_COMMAND_BUFFER_LEVEL_PRIMARY)
+                    .commandBufferCount(commandBuffers.length);
+            var p_buffers = stack.mallocPointer(commandBuffers.length);
+            _CHECK_(vkAllocateCommandBuffers(device, allocInfo, p_buffers), "Failed to allocate command buffers.");
+            for(int i = 0; i < commandBuffers.length; i++) {
+                commandBuffers[i] = new VkCommandBuffer(p_buffers.get(i), device);
+
+                var beginInfo = VkCommandBufferBeginInfo.calloc(stack)
+                        .sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
+
+                _CHECK_(vkBeginCommandBuffer(commandBuffers[i], beginInfo), "Failed to begin recording command buffer at index " + i);
+
+                var renderPassInfo = VkRenderPassBeginInfo.calloc(stack)
+                        .sType(VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO)
+                        .renderPass(pipeline.getRenderPass())
+                        .framebuffer(framebuffers[i]);
+                renderPassInfo.renderArea().offset().set(0,0);
+                renderPassInfo.renderArea().extent(swapchain.getExtent());
+
+                var clearColor = VkClearValue.calloc(1, stack);
+                clearColor.color().float32(0,0f)
+                        .float32(1,0f)
+                        .float32(2,0f)
+                        .float32(3,1f);
+
+                renderPassInfo.clearValueCount(1)
+                        .pClearValues(clearColor);
+
+                vkCmdBeginRenderPass(commandBuffers[i], renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+                vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.p_pipeline);
+                vkCmdDraw(commandBuffers[i], 3,1,0,0);
+                vkCmdEndRenderPass(commandBuffers[i]);
+                _CHECK_(vkEndCommandBuffer(commandBuffers[i]), "Failed to record command buffer at index "+i);
+            }
+        }
+    }
+
+    private void createSemaphores() {
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            var createInfo = VkSemaphoreCreateInfo.calloc(stack)
+                    .sType(VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO);
+            LongBuffer semaphores = stack.mallocLong(1);
+            _CHECK_(vkCreateSemaphore(device, createInfo, null, semaphores), "Failed to create semaphores.");
+            imageAvailableSemaphore = semaphores.get(0);
+            _CHECK_(vkCreateSemaphore(device, createInfo, null, semaphores.rewind()), "Failed to create semaphores.");
+            renderFinishedSemaphore = semaphores.get(0);
+
+        }
+    }
+
     public static int VkDebugMessengerCallback(int messageSeverity, int messageTypes, long pCallbackData, long pUserData) {
         VkDebugUtilsMessengerCallbackDataEXT data = VkDebugUtilsMessengerCallbackDataEXT.create(pCallbackData);
         AtomikVk.LOGGER.error("VK DEBUG: " + data.pMessageString());
@@ -310,6 +444,7 @@ public class Vulkan implements GraphicsProvider {
         }
     }
 
+    // this entire thing is a mess
     private void findQueueFamilies(VkPhysicalDevice device) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             IntBuffer pQueueFamilyCount = stack.mallocInt(1);

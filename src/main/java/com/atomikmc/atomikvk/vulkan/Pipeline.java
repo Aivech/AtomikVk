@@ -17,7 +17,7 @@ import static org.lwjgl.vulkan.VK10.*;
 public class Pipeline {
     private final RenderPass renderPass;
     private final long p_pipelineLayout;
-    private final long p_pipeline;
+    final long p_pipeline;
 
     Pipeline(VkDevice device, SpirVCompiler compiler, Swapchain swapchain, File... shaderFiles) {
         try(MemoryStack stack = stackPush()) {
@@ -113,6 +113,8 @@ public class Pipeline {
         }
     }
 
+    long getRenderPass() { return renderPass.vkRenderPass; }
+
     void destroy(VkDevice device) {
         vkDestroyPipeline(device, p_pipeline, null);
         vkDestroyPipelineLayout(device, p_pipelineLayout, null);
@@ -178,10 +180,20 @@ public class Pipeline {
                         .colorAttachmentCount(1)
                         .pColorAttachments(p_colorAttachRef);
 
+                var dependency = VkSubpassDependency.calloc(1, stack)
+                        .srcSubpass(VK_SUBPASS_EXTERNAL)
+                        .dstSubpass(0)
+                        .srcStageMask(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+                        .srcAccessMask(0)
+                        .dstStageMask(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+                        .dstAccessMask(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+
+
                 var createInfo = VkRenderPassCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO)
                         .pAttachments(p_colorAttach)
-                        .pSubpasses(p_subpass);
+                        .pSubpasses(p_subpass)
+                        .pDependencies(dependency);
 
                 var p_renderPass = stack.mallocLong(1);
                 _CHECK_(vkCreateRenderPass(device, createInfo, null, p_renderPass), "Failed to create render pass.");

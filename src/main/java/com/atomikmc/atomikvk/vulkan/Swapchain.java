@@ -24,7 +24,7 @@ class Swapchain {
     private final VkSurfaceFormatKHR format;
     private final VkExtent2D extent;
     private final Details details;
-    private final ImmutableLongArray imageViews;
+    final ImmutableLongArray imageViews;
 
 
     Swapchain(long glfwWindow, VkPhysicalDevice gpu, VkDevice device, long vkSurface, int graphicsFamily, int presentationFamily) {

@@ -55,6 +55,7 @@ public class GLFWHelper {
         try (MemoryStack stack = stackPush()) {
             while (!glfwWindowShouldClose(window)) {
                 // provider.update();
+                provider.drawFrame();
                 glfwPollEvents();
             }
         }
