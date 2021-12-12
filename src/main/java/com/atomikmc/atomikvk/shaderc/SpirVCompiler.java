@@ -1,12 +1,9 @@
 package com.atomikmc.atomikvk.shaderc;
 
-import org.lwjgl.util.shaderc.ShadercIncludeResolveI;
-
 import java.io.File;
 import java.io.IOException;
-import java.net.URI;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
-import java.nio.file.Path;
 
 import static org.lwjgl.util.shaderc.Shaderc.*;
 
@@ -31,22 +28,23 @@ public class SpirVCompiler implements AutoCloseable {
 
 
 
-    public SpirVResult compile(File inputFile) throws IOException {
+    public Result compile(File inputFile) throws IOException {
         String glsl = Files.readString(inputFile.toPath());
         File parentDir = inputFile.getParentFile();
         IncludeResolver includeResolver = new IncludeResolver(parentDir);
+        ShaderType type = getShaderType(inputFile.getName());
         shaderc_compile_options_set_include_callbacks(this.shaderc_compile_options, includeResolver, new IncludeResolver.Releaser(),0);
 
-        long spirV = shaderc_compile_into_spv(shaderc_compiler, glsl, getShaderType(inputFile.getName()), inputFile.getName(), ENTRY_POINT, shaderc_compile_options);
+        long spirV = shaderc_compile_into_spv(shaderc_compiler, glsl, type.shadercGlslType, inputFile.getName(), ENTRY_POINT, shaderc_compile_options);
         checkResult(spirV, shaderc_result_get_compilation_status(spirV));
 
-        return new SpirVResult(spirV);
+        return new Result(spirV, type);
     }
 
-    private static int getShaderType(String fileName) {
-        if(fileName.endsWith(".frag")) return shaderc_glsl_fragment_shader;
-        if(fileName.endsWith(".vert")) return shaderc_glsl_vertex_shader;
-        if(fileName.endsWith(".comp")) return shaderc_glsl_compute_shader;
+    private static ShaderType getShaderType(String fileName) {
+        if(fileName.endsWith(".frag")) return ShaderType.FRAG;
+        if(fileName.endsWith(".vert")) return ShaderType.VERT;
+        if(fileName.endsWith(".comp")) return ShaderType.COMP;
         throw new ShaderException("Unknown shader type for file \""+fileName+"\"");
     }
 
@@ -57,10 +55,16 @@ public class SpirVCompiler implements AutoCloseable {
         throw new ShaderException("ShaderC compile failed: error "+ status_code + " - " + msg);
     }
 
-    public static class SpirVResult implements AutoCloseable {
-        public final long result;
-        private SpirVResult(long result) {
+    public static class Result implements AutoCloseable {
+        private final long result;
+        public final ShaderType type;
+        private Result(long result, ShaderType type) {
             this.result = result;
+            this.type = type;
+        }
+
+        public ByteBuffer bytes() {
+            return shaderc_result_get_bytes(result);
         }
 
         @Override

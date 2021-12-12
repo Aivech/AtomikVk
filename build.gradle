@@ -12,7 +12,7 @@ repositories {
     mavenCentral()
 }
 
-project.ext.lwjglVersion = "3.2.3"
+project.ext.lwjglVersion = "3.3.0"
 project.ext.lwjglNatives = "natives-linux"
 
 
@@ -22,8 +22,8 @@ dependencies {
 
     implementation 'com.google.guava:guava:31.0.1-jre'
 
-    implementation group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.14.1'
-    implementation group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.14.1'
+    implementation group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.15.0'
+    implementation group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.15.0'
 
     implementation platform("org.lwjgl:lwjgl-bom:$lwjglVersion")
 

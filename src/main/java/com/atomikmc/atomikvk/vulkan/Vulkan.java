@@ -2,6 +2,7 @@ package com.atomikmc.atomikvk.vulkan;
 
 import com.atomikmc.atomikvk.AtomikVk;
 import com.atomikmc.atomikvk.common.GraphicsProvider;
+import com.atomikmc.atomikvk.shaderc.ShaderException;
 import com.atomikmc.atomikvk.shaderc.SpirVCompiler;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFW;
@@ -10,6 +11,9 @@ import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
+import javax.print.URIException;
+import java.io.File;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
@@ -231,12 +235,12 @@ public class Vulkan implements GraphicsProvider {
 
     private void createGraphicsPipeline() {
         try(SpirVCompiler compiler = new SpirVCompiler()) {
-            try(MemoryStack stack = MemoryStack.stackPush()) {
-                var createInfo = VkShaderModuleCreateInfo.callocStack(stack)
-                        .sType(VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO)
-                        .pCode();
-
-            }
+            ClassLoader loader = AtomikVk.class.getClassLoader();
+            VkPipeline pipeline = new VkPipeline(device, compiler,
+                    new File(loader.getResource("shader/triangle.vert").toURI()),
+                    new File(loader.getResource("shader/triangle.frag").toURI()));
+        } catch (Exception e) {
+            throw new ShaderException("Error getting resource", e);
         }
     }
 
