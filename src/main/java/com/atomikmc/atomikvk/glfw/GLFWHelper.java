@@ -76,6 +76,8 @@ public class GLFWHelper {
     public static void glfwCleanup() {
         provider.cleanup();
         if (window != 0) glfwDestroyWindow(0);
+        var callback = glfwSetErrorCallback(null);
+        if(callback != null) callback.free();
         glfwTerminate();
     }
 }

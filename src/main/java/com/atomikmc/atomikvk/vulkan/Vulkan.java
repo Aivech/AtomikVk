@@ -7,7 +7,6 @@ import com.atomikmc.atomikvk.shaderc.SpirVCompiler;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFWVulkan;
 import org.lwjgl.system.MemoryStack;
-import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
 import java.io.File;
@@ -29,6 +28,7 @@ public class Vulkan implements GraphicsProvider {
     public static final CharSequence[] debugExtensions = {"VK_EXT_debug_utils"};
     public static final CharSequence[] deviceRequiredExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
     public static final boolean ENABLE_VALIDATION = true;
+    // public static final int MAX_FRAMES_IN_FLIGHT = 2;
 
     private VkInstance instance;
     private long vkDebugUtilsMessenger;
@@ -42,9 +42,12 @@ public class Vulkan implements GraphicsProvider {
     private long[] framebuffers;
     private long commandPool;
     private VkCommandBuffer[] commandBuffers;
-    private long imageAvailableSemaphore;
-    private long renderFinishedSemaphore;
-    private int[] currentFrame = new int[1];
+    private long[] imageAvailableSemaphore;
+    private long[] renderFinishedSemaphore;
+    private long[] fences;
+    private long[] imagesInFlight;
+    private final int[] currentFrame = new int[1];
+    private int frameCounter = 0;
 
     @Override
     public void init(long window) {
@@ -60,16 +63,20 @@ public class Vulkan implements GraphicsProvider {
         createFramebuffers();
         createCommandPool();
         createCommandBuffers();
-        createSemaphores();
-        AtomikVk.LOGGER.error("There are n framebuffers: "+framebuffers.length);
+        createSyncObjects();
     }
     @Override
     public void drawFrame() {
-        vkAcquireNextImageKHR(device, swapchain.swapchain(), -1, imageAvailableSemaphore, VK_NULL_HANDLE, currentFrame);
+        vkWaitForFences(device, fences[frameCounter], true, -1);
+        vkAcquireNextImageKHR(device, swapchain.swapchain(), -1, imageAvailableSemaphore[frameCounter], VK_NULL_HANDLE, currentFrame);
+        if(imagesInFlight[currentFrame[0]] != VK_NULL_HANDLE) {
+            vkWaitForFences(device, imagesInFlight[currentFrame[0]], true, -1);
+        }
+        imagesInFlight[currentFrame[0]] = fences[frameCounter];
         try(MemoryStack stack = MemoryStack.stackPush()) {
-            LongBuffer waitSemaphore = stack.mallocLong(1).put(imageAvailableSemaphore).rewind();
-            LongBuffer signalSemaphore = stack.mallocLong(1).put(renderFinishedSemaphore).rewind();
-            IntBuffer waitStages = MemoryUtil.memAllocInt(1).put(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT).rewind();
+            LongBuffer waitSemaphore = stack.mallocLong(1).put(imageAvailableSemaphore[frameCounter]).rewind();
+            LongBuffer signalSemaphore = stack.mallocLong(1).put(renderFinishedSemaphore[frameCounter]).rewind();
+            IntBuffer waitStages = stack.mallocInt(1).put(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT).rewind();
             var frameSubmitInfo = VkSubmitInfo.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
                     .waitSemaphoreCount(1)
@@ -77,7 +84,9 @@ public class Vulkan implements GraphicsProvider {
                     .pWaitDstStageMask(waitStages)
                     .pSignalSemaphores(signalSemaphore)
                     .pCommandBuffers(stack.mallocPointer(1).put(commandBuffers[currentFrame[0]].address()).rewind());
-            _CHECK_(vkQueueSubmit(graphicsQueue,  frameSubmitInfo, VK_NULL_HANDLE), "failed to submit draw command buffer");
+
+            vkResetFences(device, fences[frameCounter]);
+            _CHECK_(vkQueueSubmit(graphicsQueue,  frameSubmitInfo, fences[frameCounter]), "failed to submit draw command buffer");
             var presentInfo = VkPresentInfoKHR.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_PRESENT_INFO_KHR)
                     .pWaitSemaphores(signalSemaphore.rewind())
@@ -86,7 +95,8 @@ public class Vulkan implements GraphicsProvider {
                     .pImageIndices(stack.mallocInt(1).put(currentFrame[0]).rewind());
 
             vkQueuePresentKHR(presentationQueue, presentInfo);
-
+            frameCounter = (frameCounter + 1) % framebuffers.length;
+            // vkDeviceWaitIdle(device);
         }
     }
 
@@ -98,8 +108,11 @@ public class Vulkan implements GraphicsProvider {
     @Override
     public void cleanup() {
         vkDeviceWaitIdle(device);
-        vkDestroySemaphore(device, imageAvailableSemaphore, null);
-        vkDestroySemaphore(device, renderFinishedSemaphore, null);
+        for(int i = 0; i < framebuffers.length; i++) {
+            vkDestroySemaphore(device, imageAvailableSemaphore[i], null);
+            vkDestroySemaphore(device, renderFinishedSemaphore[i], null);
+            vkDestroyFence(device, fences[i], null);
+        }
         vkDestroyCommandPool(device, commandPool, null);
 
         for(int i = 0; i < framebuffers.length; i++) {
@@ -364,16 +377,27 @@ public class Vulkan implements GraphicsProvider {
         }
     }
 
-    private void createSemaphores() {
+    private void createSyncObjects() {
+        imageAvailableSemaphore = new long[framebuffers.length];
+        renderFinishedSemaphore = new long[framebuffers.length];
+        fences = new long[framebuffers.length];
+        imagesInFlight = new long[framebuffers.length];
+        Arrays.fill(imagesInFlight, VK_NULL_HANDLE);
         try(MemoryStack stack = MemoryStack.stackPush()) {
-            var createInfo = VkSemaphoreCreateInfo.calloc(stack)
+            var semaphoreCreateInfo = VkSemaphoreCreateInfo.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO);
-            LongBuffer semaphores = stack.mallocLong(1);
-            _CHECK_(vkCreateSemaphore(device, createInfo, null, semaphores), "Failed to create semaphores.");
-            imageAvailableSemaphore = semaphores.get(0);
-            _CHECK_(vkCreateSemaphore(device, createInfo, null, semaphores.rewind()), "Failed to create semaphores.");
-            renderFinishedSemaphore = semaphores.get(0);
-
+            var fenceCreateInfo = VkFenceCreateInfo.calloc(stack)
+                    .sType(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO)
+                    .flags(VK_FENCE_CREATE_SIGNALED_BIT);
+            LongBuffer pointer = stack.mallocLong(1);
+            for(int i = 0; i < framebuffers.length; i++) {
+                _CHECK_(vkCreateSemaphore(device, semaphoreCreateInfo, null, pointer.rewind()), "Failed to create semaphores.");
+                imageAvailableSemaphore[i] = pointer.get(0);
+                _CHECK_(vkCreateSemaphore(device, semaphoreCreateInfo, null, pointer.rewind()), "Failed to create semaphores.");
+                renderFinishedSemaphore[i] = pointer.get(0);
+                _CHECK_(vkCreateFence(device, fenceCreateInfo, null, pointer.rewind()), "Failed to create fence.");
+                fences[i] = pointer.get(0);
+            }
         }
     }
 
