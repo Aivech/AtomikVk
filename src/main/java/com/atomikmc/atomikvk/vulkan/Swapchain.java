@@ -38,7 +38,7 @@ class Swapchain {
             if (details.capabilities.minImageCount() > 0 && imageCount > details.capabilities.maxImageCount()) {
                 imageCount = details.capabilities.maxImageCount();
             }
-            VkSwapchainCreateInfoKHR createInfo = VkSwapchainCreateInfoKHR.callocStack(stack)
+            VkSwapchainCreateInfoKHR createInfo = VkSwapchainCreateInfoKHR.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR)
                     .surface(vkSurface)
                     .imageFormat(format.format())
@@ -73,7 +73,7 @@ class Swapchain {
             ImmutableLongArray.Builder views = ImmutableLongArray.builder(images.length());
             for (long image: images.asList()) {
                 try(MemoryStack stack2 = stackPush()) {
-                    VkImageViewCreateInfo viewCreateInfo = VkImageViewCreateInfo.callocStack(stack)
+                    VkImageViewCreateInfo viewCreateInfo = VkImageViewCreateInfo.calloc(stack)
                             .sType(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO)
                             .image(image)
                             .viewType(VK_IMAGE_TYPE_2D)

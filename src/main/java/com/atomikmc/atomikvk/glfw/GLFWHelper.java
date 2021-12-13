@@ -2,6 +2,7 @@ package com.atomikmc.atomikvk.glfw;
 
 import com.atomikmc.atomikvk.AtomikVk;
 import com.atomikmc.atomikvk.common.GraphicsProvider;
+import com.atomikmc.atomikvk.shaderc.SpirVCompiler;
 import com.atomikmc.atomikvk.vulkan.Vulkan;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVulkan;
@@ -46,6 +47,7 @@ public class GLFWHelper {
             throw new AssertionError("No window!");
         }
 
+        SpirVCompiler.init();
         provider.init(window);
 
         return window;
@@ -75,6 +77,7 @@ public class GLFWHelper {
 
     public static void glfwCleanup() {
         provider.cleanup();
+        SpirVCompiler.destroy();
         if (window != 0) glfwDestroyWindow(0);
         var callback = glfwSetErrorCallback(null);
         if(callback != null) callback.free();

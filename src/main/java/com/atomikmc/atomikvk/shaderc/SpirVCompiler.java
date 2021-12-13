@@ -1,5 +1,7 @@
 package com.atomikmc.atomikvk.shaderc;
 
+import com.atomikmc.atomikvk.common.resource.ShaderType;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -7,45 +9,43 @@ import java.nio.file.Files;
 
 import static org.lwjgl.util.shaderc.Shaderc.*;
 
-public class SpirVCompiler implements AutoCloseable {
+public class SpirVCompiler {
     public static final String GLSL_ENTRY_POINT = "main";
+    private static SpirVCompiler instance;
 
     private final long shaderc_compiler;
     private final long shaderc_compile_options;
 
-    public SpirVCompiler() {
+    public static void init() {
+        if(instance != null) destroy();
+        instance = new SpirVCompiler();
+    }
+
+    public static void destroy() {
+        shaderc_compile_options_release(instance.shaderc_compile_options);
+        shaderc_compiler_release(instance.shaderc_compiler);
+        instance = null;
+    }
+
+    private SpirVCompiler() {
         shaderc_compiler = shaderc_compiler_initialize();
         shaderc_compile_options = shaderc_compile_options_initialize();
         shaderc_compile_options_set_optimization_level(shaderc_compile_options, shaderc_optimization_level_performance);
         shaderc_compile_options_set_target_env(shaderc_compile_options, shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_0);
     }
 
-    @Override
-    public void close() {
-        shaderc_compile_options_release(shaderc_compile_options);
-        shaderc_compiler_release(shaderc_compiler);
-    }
+    public static Result compile(File inputFile, ShaderType type) throws IOException {
+        if(instance == null) throw new RuntimeException("SPIR-V Compiler must be initialized!");
 
-
-
-    public Result compile(File inputFile) throws IOException {
         String glsl = Files.readString(inputFile.toPath());
         File parentDir = inputFile.getParentFile();
         IncludeResolver includeResolver = new IncludeResolver(parentDir);
-        ShaderType type = getShaderType(inputFile.getName());
-        shaderc_compile_options_set_include_callbacks(this.shaderc_compile_options, includeResolver, new IncludeResolver.Releaser(),0);
+        shaderc_compile_options_set_include_callbacks(instance.shaderc_compile_options, includeResolver, new IncludeResolver.Releaser(),0);
 
-        long spirV = shaderc_compile_into_spv(shaderc_compiler, glsl, type.shadercGlslType, inputFile.getName(), GLSL_ENTRY_POINT, shaderc_compile_options);
+        long spirV = shaderc_compile_into_spv(instance.shaderc_compiler, glsl, type.shadercGlslType, inputFile.getName(), GLSL_ENTRY_POINT, instance.shaderc_compile_options);
         checkResult(spirV, shaderc_result_get_compilation_status(spirV));
 
         return new Result(spirV, type);
-    }
-
-    private static ShaderType getShaderType(String fileName) {
-        if(fileName.endsWith(".frag")) return ShaderType.FRAG;
-        if(fileName.endsWith(".vert")) return ShaderType.VERT;
-        if(fileName.endsWith(".comp")) return ShaderType.COMP;
-        throw new ShaderException("Unknown shader type for file \""+fileName+"\"");
     }
 
     private static void checkResult(long compile_result, int status_code) {

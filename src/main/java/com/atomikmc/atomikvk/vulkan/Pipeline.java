@@ -1,5 +1,6 @@
 package com.atomikmc.atomikvk.vulkan;
 
+import com.atomikmc.atomikvk.common.resource.ShaderResource;
 import com.atomikmc.atomikvk.shaderc.ShaderException;
 import com.atomikmc.atomikvk.shaderc.SpirVCompiler;
 import org.lwjgl.system.MemoryStack;
@@ -19,12 +20,12 @@ public class Pipeline {
     private final long p_pipelineLayout;
     final long p_pipeline;
 
-    Pipeline(VkDevice device, SpirVCompiler compiler, Swapchain swapchain, File... shaderFiles) {
+    Pipeline(VkDevice device, Swapchain swapchain, ShaderResource... shaderResources) {
         try(MemoryStack stack = stackPush()) {
-            Shader[] shaders = new Shader[shaderFiles.length];
-            var p_stages = VkPipelineShaderStageCreateInfo.calloc(shaderFiles.length, stack);
+            Shader[] shaders = new Shader[shaderResources.length];
+            var p_stages = VkPipelineShaderStageCreateInfo.calloc(shaderResources.length, stack);
             for(int i = 0; i < shaders.length; i++) {
-                shaders[i] = new Shader(device, compiler, shaderFiles[i]);
+                shaders[i] = new Shader(device, shaderResources[i]);
                 p_stages.put(shaders[i].stageCreateInfo);
             }
             p_stages.rewind();
@@ -122,29 +123,25 @@ public class Pipeline {
     }
 
     private class Shader {
-        private final SpirVCompiler.Result spirv;
+        private final ShaderResource shader;
         private final long pVkShaderModule;
         private final VkPipelineShaderStageCreateInfo stageCreateInfo;
 
-        private Shader (VkDevice device, SpirVCompiler compiler, File glsl) {
+        private Shader (VkDevice device, ShaderResource shader) {
             try(MemoryStack stack = stackPush()) {
-                spirv = compiler.compile(glsl);
-
+                this.shader = shader;
                 VkShaderModuleCreateInfo createInfo = VkShaderModuleCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO)
-                        .pCode(spirv.bytes());
+                        .pCode(shader.getBytes());
                 LongBuffer ppShaderModule = stack.mallocLong(1);
                 _CHECK_(vkCreateShaderModule(device, createInfo, null, ppShaderModule), "Failed to create shader module!");
                 pVkShaderModule = ppShaderModule.get(0);
 
                 stageCreateInfo = VkPipelineShaderStageCreateInfo.calloc()
                         .sType(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO)
-                        .stage(spirv.type.vkStageFlag)
+                        .stage(shader.type.vkStageFlag)
                         .module(pVkShaderModule)
                         .pName(MemoryUtil.memUTF8(SpirVCompiler.GLSL_ENTRY_POINT));
-
-            } catch (IOException e) {
-                throw new ShaderException("Failed to compile GLSL.", e);
             }
         }
 
@@ -152,7 +149,7 @@ public class Pipeline {
             MemoryUtil.memFree(stageCreateInfo.pName());
             stageCreateInfo.free();
             vkDestroyShaderModule(device, pVkShaderModule, null);
-            spirv.close();
+            shader.close();
         }
     }
 

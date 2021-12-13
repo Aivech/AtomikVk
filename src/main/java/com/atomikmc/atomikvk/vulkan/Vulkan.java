@@ -2,18 +2,22 @@ package com.atomikmc.atomikvk.vulkan;
 
 import com.atomikmc.atomikvk.AtomikVk;
 import com.atomikmc.atomikvk.common.GraphicsProvider;
+import com.atomikmc.atomikvk.common.resource.ShaderResource;
 import com.atomikmc.atomikvk.shaderc.ShaderException;
-import com.atomikmc.atomikvk.shaderc.SpirVCompiler;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFWVulkan;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 
 import java.io.File;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.OptionalInt;
 
 import static org.lwjgl.vulkan.EXTDebugReport.VK_ERROR_VALIDATION_FAILED_EXT;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
@@ -37,6 +41,7 @@ public class Vulkan implements GraphicsProvider {
     private VkDevice device;
     private VkQueue graphicsQueue;
     private VkQueue presentationQueue;
+    private ShaderResource[] shaders;
     private Swapchain swapchain;
     private Pipeline pipeline;
     private long[] framebuffers;
@@ -57,9 +62,10 @@ public class Vulkan implements GraphicsProvider {
         chooseGPU();
         createLogicalDevice();
         getQueues();
+        loadInitialResources();
         swapchain = new com.atomikmc.atomikvk.vulkan.Swapchain(window, gpu, device, surfaceKHR,
                 QueueFamilies.graphicsFamily.getAsInt(), QueueFamilies.presentationFamily.getAsInt());
-        createGraphicsPipeline();
+        pipeline = new Pipeline(device, swapchain, shaders);
         createFramebuffers();
         createCommandPool();
         createCommandBuffers();
@@ -115,12 +121,15 @@ public class Vulkan implements GraphicsProvider {
         }
         vkDestroyCommandPool(device, commandPool, null);
 
-        for(int i = 0; i < framebuffers.length; i++) {
-            vkDestroyFramebuffer(device, framebuffers[i], null);
+        for (long framebuffer : framebuffers) {
+            vkDestroyFramebuffer(device, framebuffer, null);
         }
 
         pipeline.destroy(device);
         swapchain.destroy(device);
+
+
+
         if (device != null) vkDestroyDevice(device, null);
         vkDestroySurfaceKHR(instance, surfaceKHR, null);
         EXTDebugUtils.vkDestroyDebugUtilsMessengerEXT(instance, vkDebugUtilsMessenger, null);
@@ -129,7 +138,7 @@ public class Vulkan implements GraphicsProvider {
 
     private void createInstance() {
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkApplicationInfo pAppInfo = VkApplicationInfo.callocStack(stack);
+            VkApplicationInfo pAppInfo = VkApplicationInfo.calloc(stack);
             pAppInfo.sType(VK_STRUCTURE_TYPE_APPLICATION_INFO)
                     // .pApplicationName("AtomikVk")
                     .applicationVersion(VK_MAKE_VERSION(1, 0, 0))
@@ -137,14 +146,14 @@ public class Vulkan implements GraphicsProvider {
                     .engineVersion(VK_MAKE_VERSION(1, 0, 0))
                     .apiVersion(VK_API_VERSION_1_0);
 
-            VkInstanceCreateInfo pCreateInfo = VkInstanceCreateInfo.callocStack(stack);
+            VkInstanceCreateInfo pCreateInfo = VkInstanceCreateInfo.calloc(stack);
             pCreateInfo.sType(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO);
             pCreateInfo.pApplicationInfo(pAppInfo);
 
             // get available extensions
             IntBuffer pPropertyCount = stack.mallocInt(1);
             vkEnumerateInstanceExtensionProperties((CharSequence) null, pPropertyCount, null);
-            VkExtensionProperties.Buffer extensions = VkExtensionProperties.mallocStack(pPropertyCount.get(0), stack);
+            VkExtensionProperties.Buffer extensions = VkExtensionProperties.calloc(pPropertyCount.get(0), stack);
             vkEnumerateInstanceExtensionProperties((CharSequence) null, pPropertyCount, extensions);
             for (VkExtensionProperties ext : extensions) {
                 AtomikVk.LOGGER.debug(ext.extensionNameString());
@@ -192,7 +201,7 @@ public class Vulkan implements GraphicsProvider {
     private void setupDebugMessenger() {
         if (!ENABLE_VALIDATION) return;
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkDebugUtilsMessengerCreateInfoEXT messengerCreateInfo = VkDebugUtilsMessengerCreateInfoEXT.callocStack(stack);
+            VkDebugUtilsMessengerCreateInfoEXT messengerCreateInfo = VkDebugUtilsMessengerCreateInfoEXT.calloc(stack);
             messengerCreateInfo.sType(VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT)
                     .messageSeverity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
                             VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
@@ -249,9 +258,10 @@ public class Vulkan implements GraphicsProvider {
 
     private void createLogicalDevice() {
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkPhysicalDeviceFeatures features = VkPhysicalDeviceFeatures.callocStack(stack);
+            VkPhysicalDeviceFeatures features = VkPhysicalDeviceFeatures.calloc(stack);
 
-            VkDeviceQueueCreateInfo.Buffer queueCreateInfos = VkDeviceQueueCreateInfo.callocStack(1, stack);
+            findQueueFamilies(gpu);
+            VkDeviceQueueCreateInfo.Buffer queueCreateInfos = VkDeviceQueueCreateInfo.calloc(1, stack);
             VkDeviceQueueCreateInfo graphicsQueueInfo = queueCreateInfos.get(0);
             graphicsQueueInfo.sType(VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO)
                     .queueFamilyIndex(QueueFamilies.graphicsFamily.getAsInt()) // always present, we checked earlier
@@ -266,7 +276,7 @@ public class Vulkan implements GraphicsProvider {
             }
             ppDeviceExtensionNames.rewind();
 
-            VkDeviceCreateInfo createInfo = VkDeviceCreateInfo.callocStack(stack);
+            VkDeviceCreateInfo createInfo = VkDeviceCreateInfo.calloc(stack);
             createInfo.pQueueCreateInfos(queueCreateInfos)
                     .pEnabledFeatures(features)
                     .ppEnabledExtensionNames(ppDeviceExtensionNames);
@@ -291,15 +301,16 @@ public class Vulkan implements GraphicsProvider {
         }
     }
 
-    private void createGraphicsPipeline() {
-        try(SpirVCompiler compiler = new SpirVCompiler()) {
-            ClassLoader loader = AtomikVk.class.getClassLoader();
-            pipeline = new Pipeline(device, compiler, swapchain,
-                    new File(loader.getResource("shader/triangle.vert").toURI()),
-                    new File(loader.getResource("shader/triangle.frag").toURI()));
-        } catch (Exception e) {
-            throw new ShaderException("Error getting resource", e);
+    private void loadInitialResources() {
+        shaders = new ShaderResource[2];
+        ClassLoader loader = AtomikVk.class.getClassLoader();
+        try {
+            shaders[0] = new ShaderResource(new File(loader.getResource("shader/triangle.vert").toURI()));
+            shaders[1] = new ShaderResource(new File(loader.getResource("shader/triangle.frag").toURI()));
+        } catch (URISyntaxException e) {
+            throw new ShaderException("Failed to load shader resource", e);
         }
+
     }
 
     private void createFramebuffers() {
@@ -414,7 +425,7 @@ public class Vulkan implements GraphicsProvider {
             IntBuffer pLayerCount = stack.mallocInt(1);
             vkEnumerateInstanceLayerProperties(pLayerCount, null);
 
-            VkLayerProperties.Buffer pVkLayerProperties = VkLayerProperties.callocStack(pLayerCount.get(0), stack);
+            VkLayerProperties.Buffer pVkLayerProperties = VkLayerProperties.calloc(pLayerCount.get(0), stack);
             vkEnumerateInstanceLayerProperties(pLayerCount, pVkLayerProperties);
 
             AtomikVk.LOGGER.debug("VK validation layers available:");
@@ -439,9 +450,9 @@ public class Vulkan implements GraphicsProvider {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             int score = 1;
 
-            VkPhysicalDeviceProperties properties = VkPhysicalDeviceProperties.callocStack(stack);
+            VkPhysicalDeviceProperties properties = VkPhysicalDeviceProperties.calloc(stack);
             vkGetPhysicalDeviceProperties(device, properties);
-            VkPhysicalDeviceFeatures features = VkPhysicalDeviceFeatures.callocStack(stack);
+            VkPhysicalDeviceFeatures features = VkPhysicalDeviceFeatures.calloc(stack);
             vkGetPhysicalDeviceFeatures(device, features);
 
             // get device queue families
@@ -473,7 +484,7 @@ public class Vulkan implements GraphicsProvider {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             IntBuffer pQueueFamilyCount = stack.mallocInt(1);
             vkGetPhysicalDeviceQueueFamilyProperties(device, pQueueFamilyCount, null);
-            VkQueueFamilyProperties.Buffer queueFamilies = VkQueueFamilyProperties.callocStack(pQueueFamilyCount.get(0), stack);
+            VkQueueFamilyProperties.Buffer queueFamilies = VkQueueFamilyProperties.calloc(pQueueFamilyCount.get(0), stack);
             vkGetPhysicalDeviceQueueFamilyProperties(device, pQueueFamilyCount, queueFamilies);
 
             for (int i = 0; i < pQueueFamilyCount.get(0); i++) {
@@ -497,7 +508,7 @@ public class Vulkan implements GraphicsProvider {
             IntBuffer pExtensionCount = stack.mallocInt(1);
             vkEnumerateDeviceExtensionProperties(device, (ByteBuffer) null, pExtensionCount, null);
 
-            VkExtensionProperties.Buffer pDeviceExtensions = VkExtensionProperties.callocStack(pExtensionCount.get(), stack);
+            VkExtensionProperties.Buffer pDeviceExtensions = VkExtensionProperties.calloc(pExtensionCount.get(), stack);
             vkEnumerateDeviceExtensionProperties(device, (ByteBuffer) null, pExtensionCount.rewind(), pDeviceExtensions);
 
             HashSet<CharSequence> requiredExtensions = new HashSet<>(Arrays.asList(deviceRequiredExtensions));
@@ -550,7 +561,7 @@ public class Vulkan implements GraphicsProvider {
     }
 
     // java structs when
-    private class QueueFamilies {
+    private static class QueueFamilies {
         private static OptionalInt graphicsFamily = OptionalInt.empty();
         private static OptionalInt presentationFamily = OptionalInt.empty();
 
