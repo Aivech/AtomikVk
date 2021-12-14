@@ -149,7 +149,6 @@ public class Pipeline {
             MemoryUtil.memFree(stageCreateInfo.pName());
             stageCreateInfo.free();
             vkDestroyShaderModule(device, pVkShaderModule, null);
-            shader.close();
         }
     }
 

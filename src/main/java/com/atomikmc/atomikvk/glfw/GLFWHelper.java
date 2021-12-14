@@ -8,8 +8,6 @@ import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVulkan;
 import org.lwjgl.system.MemoryStack;
 
-import java.nio.IntBuffer;
-
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.system.MemoryStack.stackPush;
 
@@ -39,7 +37,7 @@ public class GLFWHelper {
         }
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
         window = glfwCreateWindow(INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT, "AtomikVk", 0, 0);
 
@@ -49,6 +47,8 @@ public class GLFWHelper {
 
         SpirVCompiler.init();
         provider.init(window);
+
+        glfwSetFramebufferSizeCallback(window, GLFWHelper::updateFramebufferSize);
 
         return window;
     }
@@ -64,23 +64,18 @@ public class GLFWHelper {
 
     }
 
-    private static void updateFramebufferSize() {
-        try (MemoryStack stack = stackPush()) {
-            IntBuffer framebufferWidth = stack.mallocInt(1);
-            IntBuffer framebufferHeight = stack.mallocInt(1);
-            glfwGetFramebufferSize(window, framebufferWidth, framebufferHeight);
-            width = framebufferWidth.get(0);
-            height = framebufferHeight.get(0);
-        }
+    private static void updateFramebufferSize(long window, int width, int height) {
+        provider.windowResizeUpdate();
     }
 
-
     public static void glfwCleanup() {
+        final var resizeCallback = glfwSetFramebufferSizeCallback(window, null);
+        if (resizeCallback != null) resizeCallback.free();
         provider.cleanup();
         SpirVCompiler.destroy();
         if (window != 0) glfwDestroyWindow(0);
-        var callback = glfwSetErrorCallback(null);
-        if(callback != null) callback.free();
+        final var errorCallback = glfwSetErrorCallback(null);
+        if(errorCallback != null) errorCallback.free();
         glfwTerminate();
     }
 }

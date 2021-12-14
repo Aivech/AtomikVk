@@ -19,12 +19,14 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.OptionalInt;
 
+import static org.lwjgl.glfw.GLFW.glfwWaitEvents;
 import static org.lwjgl.vulkan.EXTDebugReport.VK_ERROR_VALIDATION_FAILED_EXT;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.KHRDisplaySwapchain.VK_ERROR_INCOMPATIBLE_DISPLAY_KHR;
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.*;
 import static org.lwjgl.vulkan.VK10.*;
+import static org.lwjgl.glfw.GLFW.glfwGetFramebufferSize;
 
 
 public class Vulkan implements GraphicsProvider {
@@ -34,6 +36,7 @@ public class Vulkan implements GraphicsProvider {
     public static final boolean ENABLE_VALIDATION = true;
     // public static final int MAX_FRAMES_IN_FLIGHT = 2;
 
+    private long glfwWindow;
     private VkInstance instance;
     private long vkDebugUtilsMessenger;
     private long surfaceKHR;
@@ -56,6 +59,7 @@ public class Vulkan implements GraphicsProvider {
 
     @Override
     public void init(long window) {
+        glfwWindow = window;
         createInstance();
         setupDebugMessenger();
         createSurface(window);
@@ -74,7 +78,12 @@ public class Vulkan implements GraphicsProvider {
     @Override
     public void drawFrame() {
         vkWaitForFences(device, fences[frameCounter], true, -1);
-        vkAcquireNextImageKHR(device, swapchain.swapchain(), -1, imageAvailableSemaphore[frameCounter], VK_NULL_HANDLE, currentFrame);
+        var result = vkAcquireNextImageKHR(device, swapchain.swapchain(), -1, imageAvailableSemaphore[frameCounter], VK_NULL_HANDLE, currentFrame);
+        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+            windowResizeUpdate();
+            return;
+        }
+
         if(imagesInFlight[currentFrame[0]] != VK_NULL_HANDLE) {
             vkWaitForFences(device, imagesInFlight[currentFrame[0]], true, -1);
         }
@@ -100,35 +109,60 @@ public class Vulkan implements GraphicsProvider {
                     .pSwapchains(stack.mallocLong(1).put(swapchain.swapchain()).rewind())
                     .pImageIndices(stack.mallocInt(1).put(currentFrame[0]).rewind());
 
-            vkQueuePresentKHR(presentationQueue, presentInfo);
+            var presentResult = vkQueuePresentKHR(presentationQueue, presentInfo);
+            if(presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) windowResizeUpdate();
+            else _CHECK_(presentResult, "Failed to present image!");
             frameCounter = (frameCounter + 1) % framebuffers.length;
             // vkDeviceWaitIdle(device);
         }
     }
 
     @Override
-    public void update(IntBuffer pImageIndex, int w, int h) {
+    public void windowResizeUpdate() {
+        int[] width = new int[1];
+        int[] height = new int[1];
+        glfwGetFramebufferSize(glfwWindow, width, height);
+        while(width[0] == 0 || height[0] == 0) {
+            glfwWaitEvents();
+            glfwGetFramebufferSize(glfwWindow, width, height);
+        }
 
+        vkDeviceWaitIdle(device);
+
+        destroySwapchain();
+
+        swapchain = new Swapchain(glfwWindow, gpu, device, surfaceKHR,
+                QueueFamilies.graphicsFamily.getAsInt(), QueueFamilies.presentationFamily.getAsInt());
+        pipeline = new Pipeline(device, swapchain, shaders);
+        createFramebuffers();
+        createCommandPool();
+        createCommandBuffers();
+        createSyncObjects();
     }
 
-    @Override
-    public void cleanup() {
-        vkDeviceWaitIdle(device);
+    public void destroySwapchain() {
         for(int i = 0; i < framebuffers.length; i++) {
             vkDestroySemaphore(device, imageAvailableSemaphore[i], null);
             vkDestroySemaphore(device, renderFinishedSemaphore[i], null);
             vkDestroyFence(device, fences[i], null);
         }
         vkDestroyCommandPool(device, commandPool, null);
-
         for (long framebuffer : framebuffers) {
             vkDestroyFramebuffer(device, framebuffer, null);
         }
-
         pipeline.destroy(device);
         swapchain.destroy(device);
+    }
 
+    @Override
+    public void cleanup() {
+        vkDeviceWaitIdle(device);
 
+        destroySwapchain();
+
+        for(var shader: shaders) {
+            shader.close();
+        }
 
         if (device != null) vkDestroyDevice(device, null);
         vkDestroySurfaceKHR(instance, surfaceKHR, null);
