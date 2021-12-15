@@ -35,7 +35,7 @@ class Swapchain {
             extent = details.extent;
 
             int imageCount = details.capabilities.minImageCount()+1;
-            if (details.capabilities.minImageCount() > 0 && imageCount > details.capabilities.maxImageCount()) {
+            if (details.capabilities.maxImageCount() > 0 && imageCount > details.capabilities.maxImageCount()) {
                 imageCount = details.capabilities.maxImageCount();
             }
             VkSwapchainCreateInfoKHR createInfo = VkSwapchainCreateInfoKHR.calloc(stack)
