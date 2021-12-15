@@ -33,7 +33,7 @@ public class Vulkan implements GraphicsProvider {
     public static final CharSequence[] validationLayers = {"VK_LAYER_KHRONOS_validation"};
     public static final CharSequence[] debugExtensions = {"VK_EXT_debug_utils"};
     public static final CharSequence[] deviceRequiredExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-    public static final boolean ENABLE_VALIDATION = true;
+    public static final boolean ENABLE_VALIDATION = true; //true;
     // public static final int MAX_FRAMES_IN_FLIGHT = 2;
 
     private long glfwWindow;
@@ -172,7 +172,7 @@ public class Vulkan implements GraphicsProvider {
 
         if (device != null) vkDestroyDevice(device, null);
         vkDestroySurfaceKHR(instance, surfaceKHR, null);
-        EXTDebugUtils.vkDestroyDebugUtilsMessengerEXT(instance, vkDebugUtilsMessenger, null);
+        if(ENABLE_VALIDATION) EXTDebugUtils.vkDestroyDebugUtilsMessengerEXT(instance, vkDebugUtilsMessenger, null);
         vkDestroyInstance(instance, null);
     }
 
@@ -317,7 +317,8 @@ public class Vulkan implements GraphicsProvider {
             ppDeviceExtensionNames.rewind();
 
             VkDeviceCreateInfo createInfo = VkDeviceCreateInfo.calloc(stack);
-            createInfo.pQueueCreateInfos(queueCreateInfos)
+            createInfo.sType(VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO)
+                    .pQueueCreateInfos(queueCreateInfos)
                     .pEnabledFeatures(features)
                     .ppEnabledExtensionNames(ppDeviceExtensionNames);
 
@@ -570,6 +571,11 @@ public class Vulkan implements GraphicsProvider {
                 if(presentSupport.get(0) == 1) {
                     QueueFamilies.presentationFamily = OptionalInt.of(i);
                 }
+
+                AtomikVk.LOGGER.error("Queue Family: "+i+" graphics: " + ((family.queueFlags() & VK_QUEUE_GRAPHICS_BIT)!=0) +
+                        " compute: " + ((family.queueFlags() & VK_QUEUE_COMPUTE_BIT)!=0) +
+                        " transfer: " + ((family.queueFlags() & VK_QUEUE_TRANSFER_BIT)!=0) +
+                        " present: " + (presentSupport.get(0)==1));
                 if(QueueFamilies.isComplete()) break;
             }
         }

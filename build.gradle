@@ -60,7 +60,7 @@ jar {
     manifest {
         attributes(
                 "Manifest-Version": 1.0,
-                "Main-Class":"com.atomik-mc.atomikvk.AtomikVk"
+                "Main-Class":"com.atomikmc.atomikvk.AtomikVk"
         )
     }
 }
