@@ -164,8 +164,8 @@ public class Vulkan implements GraphicsProvider {
 
             destroySwapchain();
 
-            vkDestroyBuffer(device, vertexBuffer, null);
-            vkFreeMemory(device, vertexBufMem, null);
+            if(vertexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(device, vertexBuffer, null);
+            if(vertexBufMem != VK_NULL_HANDLE) vkFreeMemory(device, vertexBufMem, null);
 
             for(var shader: shaders) {
                 shader.close();
@@ -174,9 +174,12 @@ public class Vulkan implements GraphicsProvider {
             vkDestroyDevice(device, null);
         }
 
-        vkDestroySurfaceKHR(instance, surfaceKHR, null);
-        if(ENABLE_VALIDATION) EXTDebugUtils.vkDestroyDebugUtilsMessengerEXT(instance, vkDebugUtilsMessenger, null);
-        vkDestroyInstance(instance, null);
+        if(surfaceKHR != VK_NULL_HANDLE) vkDestroySurfaceKHR(instance, surfaceKHR, null);
+
+        if(ENABLE_VALIDATION && vkDebugUtilsMessenger != VK_NULL_HANDLE)
+            EXTDebugUtils.vkDestroyDebugUtilsMessengerEXT(instance, vkDebugUtilsMessenger, null);
+
+        if(instance != null) vkDestroyInstance(instance, null);
     }
 
     private void createInstance() {
