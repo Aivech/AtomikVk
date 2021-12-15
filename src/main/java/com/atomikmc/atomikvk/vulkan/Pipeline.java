@@ -32,8 +32,8 @@ public class Pipeline {
 
             var vertexInputState = VkPipelineVertexInputStateCreateInfo.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO)
-                    .pVertexBindingDescriptions(null)
-                    .pVertexAttributeDescriptions(null);
+                    .pVertexBindingDescriptions(VkVertex.getBindDesc(stack))
+                    .pVertexAttributeDescriptions(VkVertex.getAttrDesc(stack));
 
             var inputAssyState = VkPipelineInputAssemblyStateCreateInfo.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO)
