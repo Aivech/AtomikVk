@@ -159,18 +159,21 @@ public class Vulkan implements GraphicsProvider {
 
     @Override
     public void cleanup() {
-        vkDeviceWaitIdle(device);
+        if(device != null) {
+            vkDeviceWaitIdle(device);
 
-        destroySwapchain();
+            destroySwapchain();
 
-        vkDestroyBuffer(device, vertexBuffer, null);
-        vkFreeMemory(device, vertexBufMem, null);
+            vkDestroyBuffer(device, vertexBuffer, null);
+            vkFreeMemory(device, vertexBufMem, null);
 
-        for(var shader: shaders) {
-            shader.close();
+            for(var shader: shaders) {
+                shader.close();
+            }
+
+            vkDestroyDevice(device, null);
         }
 
-        if (device != null) vkDestroyDevice(device, null);
         vkDestroySurfaceKHR(instance, surfaceKHR, null);
         if(ENABLE_VALIDATION) EXTDebugUtils.vkDestroyDebugUtilsMessengerEXT(instance, vkDebugUtilsMessenger, null);
         vkDestroyInstance(instance, null);
@@ -223,13 +226,16 @@ public class Vulkan implements GraphicsProvider {
             if (ENABLE_VALIDATION && !checkValidationLayerSupport()) {
                 throw new AssertionError("Requested validation layers not present!");
             }
-            // and enable them
-            PointerBuffer pVkRequiredLayers = stack.mallocPointer(validationLayers.length);
-            for (CharSequence layer : validationLayers) {
-                pVkRequiredLayers.put(stack.UTF8(layer, true));
+
+            if(ENABLE_VALIDATION) {
+                // and enable them
+                PointerBuffer pVkRequiredLayers = stack.mallocPointer(validationLayers.length);
+                for (CharSequence layer : validationLayers) {
+                    pVkRequiredLayers.put(stack.UTF8(layer, true));
+                }
+                pVkRequiredLayers.rewind();  // necessary or nothing gets loaded
+                pCreateInfo.ppEnabledLayerNames(pVkRequiredLayers);
             }
-            pVkRequiredLayers.rewind();  // necessary or nothing gets loaded
-            pCreateInfo.ppEnabledLayerNames(pVkRequiredLayers);
 
             // create VkInstance
             PointerBuffer vkInstanceBuffer = stack.callocPointer(1);
