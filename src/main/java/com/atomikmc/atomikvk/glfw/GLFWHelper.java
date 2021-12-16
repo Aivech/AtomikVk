@@ -14,15 +14,12 @@ import static org.lwjgl.system.MemoryStack.stackPush;
 public class GLFWHelper {
     private static long window = 0;
 
-    private static int width = 0;
-    private static int height = 0;
-
     public static final int INITIAL_WINDOW_WIDTH = 1280;
     public static final int INITIAL_WINDOW_HEIGHT = 720;
 
     private static GraphicsProvider provider = new Vulkan();
 
-    public static long glfwSetupWindow() {
+    public static void glfwSetupWindow() {
         if (!glfwInit()) {
             throw new AssertionError("GLFW init failed");
         }
@@ -48,9 +45,7 @@ public class GLFWHelper {
         SpirVCompiler.init();
         provider.init(window);
 
-        glfwSetFramebufferSizeCallback(window, GLFWHelper::updateFramebufferSize);
-
-        return window;
+        glfwSetFramebufferSizeCallback(window, (window1, width, height) -> updateFramebufferSize());
     }
 
     public static void startWindowLoop() {
@@ -64,7 +59,7 @@ public class GLFWHelper {
 
     }
 
-    private static void updateFramebufferSize(long window, int width, int height) {
+    private static void updateFramebufferSize() {
         provider.windowResizeUpdate();
     }
 
@@ -75,7 +70,7 @@ public class GLFWHelper {
         SpirVCompiler.destroy();
         if (window != 0) glfwDestroyWindow(0);
         final var errorCallback = glfwSetErrorCallback(null);
-        if(errorCallback != null) errorCallback.free();
+        if (errorCallback != null) errorCallback.free();
         glfwTerminate();
     }
 }

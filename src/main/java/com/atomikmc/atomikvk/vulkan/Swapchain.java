@@ -2,8 +2,6 @@ package com.atomikmc.atomikvk.vulkan;
 
 import com.atomikmc.atomikvk.AtomikVk;
 import com.google.common.collect.ImmutableList;
-import com.google.common.primitives.ImmutableIntArray;
-import com.google.common.primitives.ImmutableLongArray;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
@@ -12,35 +10,33 @@ import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 
 import static com.atomikmc.atomikvk.vulkan.Vulkan._CHECK_;
+import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.*;
 import static org.lwjgl.vulkan.VK10.*;
-import static org.lwjgl.system.MemoryStack.*;
 
 class Swapchain {
     private final long pSwapchain;
-    private final ImmutableLongArray images;
-    private final int presentMode;
     private final VkSurfaceFormatKHR format;
     private final VkExtent2D extent;
     private final Details details;
-    final ImmutableLongArray imageViews;
+    final ImmutableList<Long> imageViews;
 
 
     Swapchain(long glfwWindow, PhysicalDevice gpu, VkDevice device, long vkSurface) {
-        try(MemoryStack stack = stackPush()) {
+        try (MemoryStack stack = stackPush()) {
             details = new Details(gpu.device, vkSurface, glfwWindow);
             format = details.chooseSurfaceFormat();
-            presentMode = details.choosePresentMode(VK_PRESENT_MODE_MAILBOX_KHR);
+            int presentMode = details.choosePresentMode(VK_PRESENT_MODE_MAILBOX_KHR);
             extent = details.extent;
 
-            int imageCount = details.capabilities.minImageCount()+1;
+            int imageCount = details.capabilities.minImageCount() + 1;
             if (details.capabilities.maxImageCount() > 0 && imageCount > details.capabilities.maxImageCount()) {
                 imageCount = details.capabilities.maxImageCount();
             }
             int queueCount = gpu.graphicsIndex != gpu.presentIndex ? 2 : 1;
             var queues = stack.mallocInt(queueCount).put(gpu.graphicsIndex);
-            if(queueCount == 2) queues.put(gpu.presentIndex);
+            if (queueCount == 2) queues.put(gpu.presentIndex);
             queues.rewind();
             VkSwapchainCreateInfoKHR createInfo = VkSwapchainCreateInfoKHR.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR)
@@ -70,32 +66,25 @@ class Swapchain {
             vkGetSwapchainImagesKHR(device, pSwapchain, pImageCount, ppVkImages);
 
             ppVkImages.rewind();
-            ImmutableLongArray.Builder temp = ImmutableLongArray.builder(pImageCount.get(0));
-            while(ppVkImages.hasRemaining()) {
-                temp.add(ppVkImages.get());
-            }
-            images = temp.build();
 
-            ImmutableLongArray.Builder views = ImmutableLongArray.builder(images.length());
-            for (long image: images.asList()) {
-                try(MemoryStack stack2 = stackPush()) {
-                    VkImageViewCreateInfo viewCreateInfo = VkImageViewCreateInfo.calloc(stack)
-                            .sType(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO)
-                            .image(image)
-                            .viewType(VK_IMAGE_TYPE_2D)
-                            .format(format.format());
-                    viewCreateInfo.components().set(VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY);
-                    viewCreateInfo.subresourceRange().set(
-                            VK_IMAGE_ASPECT_COLOR_BIT,
-                            0,
-                            1,
-                            0,
-                            1
-                    );
-                    LongBuffer ppImageView = stack.mallocLong(1);
-                    _CHECK_(vkCreateImageView(device, viewCreateInfo, null, ppImageView), "failed to create image views!");
-                    views.add(ppImageView.get(0));
-                }
+            ImmutableList.Builder<Long> views = ImmutableList.builder();
+            while (ppVkImages.hasRemaining()) {
+                VkImageViewCreateInfo viewCreateInfo = VkImageViewCreateInfo.calloc(stack)
+                        .sType(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO)
+                        .image(ppVkImages.get())
+                        .viewType(VK_IMAGE_TYPE_2D)
+                        .format(format.format());
+                viewCreateInfo.components().set(VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY);
+                viewCreateInfo.subresourceRange().set(
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        0,
+                        1,
+                        0,
+                        1
+                );
+                LongBuffer ppImageView = stack.mallocLong(1);
+                _CHECK_(vkCreateImageView(device, viewCreateInfo, null, ppImageView), "failed to create image views!");
+                views.add(ppImageView.get(0));
             }
             imageViews = views.build();
         }
@@ -105,15 +94,24 @@ class Swapchain {
         return pSwapchain;
     }
 
-    int width() { return extent.width(); }
-    int height() { return extent.height(); }
+    int width() {
+        return extent.width();
+    }
 
-    VkExtent2D getExtent() { return extent; }
+    int height() {
+        return extent.height();
+    }
 
-    int getImageFormat() { return this.format.format(); }
+    VkExtent2D getExtent() {
+        return extent;
+    }
+
+    int getImageFormat() {
+        return this.format.format();
+    }
 
     void destroy(VkDevice device) {
-        for(long imageView: imageViews.asList()) {
+        for (long imageView : imageViews) {
             vkDestroyImageView(device, imageView, null);
         }
         details.destroy();
@@ -123,11 +121,11 @@ class Swapchain {
     static private class Details {
         private VkSurfaceCapabilitiesKHR capabilities;
         private VkSurfaceFormatKHR.Buffer formats;
-        private ImmutableIntArray presentModes;
+        private ImmutableList<Integer> presentModes;
         private VkExtent2D extent;
 
         private Details(VkPhysicalDevice gpu, long vkSurface, long glfwWindow) {
-            try(MemoryStack stack = stackPush()) {
+            try (MemoryStack stack = stackPush()) {
                 capabilities = VkSurfaceCapabilitiesKHR.calloc();
                 vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, vkSurface, capabilities);
 
@@ -143,13 +141,13 @@ class Swapchain {
                 vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, vkSurface, pPresentModeCount.rewind(), pPresentModes);
 
                 pPresentModes.rewind();
-                ImmutableIntArray.Builder temp = ImmutableIntArray.builder(pPresentModeCount.get(0));
-                while(pPresentModes.hasRemaining()) {
+                ImmutableList.Builder<Integer> temp = ImmutableList.builder();
+                while (pPresentModes.hasRemaining()) {
                     temp.add(pPresentModes.get());
                 }
                 presentModes = temp.build();
 
-                if(capabilities.currentExtent().width() != -1) {
+                if (capabilities.currentExtent().width() != -1) {
                     extent = VkExtent2D.calloc().set(capabilities.currentExtent().width(), capabilities.currentExtent().height());
                 } else {
                     IntBuffer pWidth = stack.mallocInt(1);
@@ -175,22 +173,22 @@ class Swapchain {
         }
 
         private int choosePresentMode(int preferredMode) {
-            for(int mode: presentModes.asList()) {
-                if(mode == preferredMode) return mode;
+            for (int mode : presentModes) {
+                if (mode == preferredMode) return mode;
             }
             return VK_PRESENT_MODE_FIFO_KHR;
         }
 
         private void destroy() {
-            if(capabilities != null) {
+            if (capabilities != null) {
                 capabilities.free();
                 capabilities = null;
             }
-            if(formats != null) {
+            if (formats != null) {
                 formats.free();
                 formats = null;
             }
-            if(extent != null) {
+            if (extent != null) {
                 extent.free();
                 extent = null;
             }

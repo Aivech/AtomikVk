@@ -8,13 +8,14 @@ import org.lwjgl.system.Configuration;
 public class AtomikVk {
 
     public static final Logger LOGGER = LogManager.getLogger("AtomikVk");
+
     public static void main(String[] args) {
         try {
             Configuration.DEBUG_MEMORY_ALLOCATOR.set(true);
-            long window = GLFWHelper.glfwSetupWindow();
+            GLFWHelper.glfwSetupWindow();
             GLFWHelper.startWindowLoop();
 
-        } catch(Throwable e) {
+        } catch (Throwable e) {
             LOGGER.fatal("Fatal error.", e);
             throw e;
         } finally {

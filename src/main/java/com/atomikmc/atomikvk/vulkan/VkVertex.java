@@ -10,18 +10,10 @@ import org.lwjgl.vulkan.VkVertexInputBindingDescription;
 
 import static org.lwjgl.vulkan.VK10.*;
 
-public class VkVertex {
+public record VkVertex(Vector2fc pos, Vector3fc color) {
     static final int SIZE = (2 + 3) * Float.BYTES;
     private static final int OFFSET_POS = 0;
     private static final int OFFSET_COLOR = 2 * Float.BYTES;
-
-    final Vector2fc pos;
-    final Vector3fc color;
-
-    public VkVertex(Vector2fc pos, Vector3fc color) {
-        this.pos = pos;
-        this.color = color;
-    }
 
     static VkVertexInputBindingDescription.Buffer getBindDesc(MemoryStack stack) {
         return VkVertexInputBindingDescription.calloc(1, stack)
@@ -50,29 +42,29 @@ public class VkVertex {
             new VkVertex(new Vector2f(-0.25f, -0.25f), new Vector3f(1.0f, 0.0f, 0.0f)),
             new VkVertex(new Vector2f(0.25f, -0.25f), new Vector3f(0.0f, 1.0f, 0.0f)),
 
-            new VkVertex(new Vector2f(0.0f, -0.25f+.625f), new Vector3f(0.0f, 0.0f, 1.0f)),
-            new VkVertex(new Vector2f(0.25f, 0.25f+.625f), new Vector3f(0.0f, 1.0f, 1.0f)),
-            new VkVertex(new Vector2f(-0.25f, 0.25f+.625f), new Vector3f(1.0f, 0.0f, 1.0f)),
+            new VkVertex(new Vector2f(0.0f, -0.25f + .625f), new Vector3f(0.0f, 0.0f, 1.0f)),
+            new VkVertex(new Vector2f(0.25f, 0.25f + .625f), new Vector3f(0.0f, 1.0f, 1.0f)),
+            new VkVertex(new Vector2f(-0.25f, 0.25f + .625f), new Vector3f(1.0f, 0.0f, 1.0f)),
 
-            new VkVertex(new Vector2f(0.0f, -0.25f-.625f), new Vector3f(1.0f, 1.0f, 0.0f)),
-            new VkVertex(new Vector2f(0.25f, 0.25f-.625f), new Vector3f(0.0f, 1.0f, 0.0f)),
-            new VkVertex(new Vector2f(-0.25f, 0.25f-.625f), new Vector3f(1.0f, 0.0f, 0.0f)),
+            new VkVertex(new Vector2f(0.0f, -0.25f - .625f), new Vector3f(1.0f, 1.0f, 0.0f)),
+            new VkVertex(new Vector2f(0.25f, 0.25f - .625f), new Vector3f(0.0f, 1.0f, 0.0f)),
+            new VkVertex(new Vector2f(-0.25f, 0.25f - .625f), new Vector3f(1.0f, 0.0f, 0.0f)),
 
-            new VkVertex(new Vector2f(0.0f-.625f, -0.25f+.5f), new Vector3f(1.0f, 1.0f, 0.0f)),
-            new VkVertex(new Vector2f(0.25f-.625f, 0.25f+.5f), new Vector3f(1.0f, 0.0f, 1.0f)),
-            new VkVertex(new Vector2f(-0.25f-.625f, 0.25f+.5f), new Vector3f(0.0f, 1.0f, 1.0f)),
+            new VkVertex(new Vector2f(0.0f - .625f, -0.25f + .5f), new Vector3f(1.0f, 1.0f, 0.0f)),
+            new VkVertex(new Vector2f(0.25f - .625f, 0.25f + .5f), new Vector3f(1.0f, 0.0f, 1.0f)),
+            new VkVertex(new Vector2f(-0.25f - .625f, 0.25f + .5f), new Vector3f(0.0f, 1.0f, 1.0f)),
 
-            new VkVertex(new Vector2f(0.0f+.625f, -0.25f+.5f), new Vector3f(1.0f, 1.0f, 0.0f)),
-            new VkVertex(new Vector2f(0.25f+.625f, 0.25f+.5f), new Vector3f(1.0f, 0.0f, 1.0f)),
-            new VkVertex(new Vector2f(-0.25f+.625f, 0.25f+.5f), new Vector3f(0.0f, 1.0f, 1.0f)),
+            new VkVertex(new Vector2f(0.0f + .625f, -0.25f + .5f), new Vector3f(1.0f, 1.0f, 0.0f)),
+            new VkVertex(new Vector2f(0.25f + .625f, 0.25f + .5f), new Vector3f(1.0f, 0.0f, 1.0f)),
+            new VkVertex(new Vector2f(-0.25f + .625f, 0.25f + .5f), new Vector3f(0.0f, 1.0f, 1.0f)),
 
-            new VkVertex(new Vector2f(0.0f-.625f, -0.25f-.5f), new Vector3f(1.0f, 1.0f, 0.0f)),
-            new VkVertex(new Vector2f(0.25f-.625f, 0.25f-.5f), new Vector3f(1.0f, 0.0f, 1.0f)),
-            new VkVertex(new Vector2f(-0.25f-.625f, 0.25f-.5f), new Vector3f(0.0f, 1.0f, 1.0f)),
+            new VkVertex(new Vector2f(0.0f - .625f, -0.25f - .5f), new Vector3f(1.0f, 1.0f, 0.0f)),
+            new VkVertex(new Vector2f(0.25f - .625f, 0.25f - .5f), new Vector3f(1.0f, 0.0f, 1.0f)),
+            new VkVertex(new Vector2f(-0.25f - .625f, 0.25f - .5f), new Vector3f(0.0f, 1.0f, 1.0f)),
 
-            new VkVertex(new Vector2f(0.0f+.625f, -0.25f-.5f), new Vector3f(1.0f, 1.0f, 0.0f)),
-            new VkVertex(new Vector2f(0.25f+.625f, 0.25f-.5f), new Vector3f(1.0f, 0.0f, 1.0f)),
-            new VkVertex(new Vector2f(-0.25f+.625f, 0.25f-.5f), new Vector3f(0.0f, 1.0f, 1.0f)),
+            new VkVertex(new Vector2f(0.0f + .625f, -0.25f - .5f), new Vector3f(1.0f, 1.0f, 0.0f)),
+            new VkVertex(new Vector2f(0.25f + .625f, 0.25f - .5f), new Vector3f(1.0f, 0.0f, 1.0f)),
+            new VkVertex(new Vector2f(-0.25f + .625f, 0.25f - .5f), new Vector3f(0.0f, 1.0f, 1.0f)),
 
     };
 }

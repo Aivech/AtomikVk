@@ -11,14 +11,11 @@ import org.lwjgl.vulkan.*;
 
 import java.io.File;
 import java.net.URISyntaxException;
-import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
-import java.util.OptionalInt;
 
+import static org.lwjgl.glfw.GLFW.glfwGetFramebufferSize;
 import static org.lwjgl.glfw.GLFW.glfwWaitEvents;
 import static org.lwjgl.vulkan.EXTDebugReport.VK_ERROR_VALIDATION_FAILED_EXT;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
@@ -26,13 +23,12 @@ import static org.lwjgl.vulkan.KHRDisplaySwapchain.VK_ERROR_INCOMPATIBLE_DISPLAY
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.*;
 import static org.lwjgl.vulkan.VK10.*;
-import static org.lwjgl.glfw.GLFW.glfwGetFramebufferSize;
 
 
 public class Vulkan implements GraphicsProvider {
     public static final CharSequence[] validationLayers = {"VK_LAYER_KHRONOS_validation"};
     public static final CharSequence[] debugExtensions = {"VK_EXT_debug_utils"};
-    public static final CharSequence[] deviceRequiredExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+    public static final CharSequence[] deviceRequiredExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     public static final boolean ENABLE_VALIDATION = true; //true;
     // public static final int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -77,6 +73,7 @@ public class Vulkan implements GraphicsProvider {
         createCommandBuffers();
         createSyncObjects();
     }
+
     @Override
     public void drawFrame() {
         vkWaitForFences(device, fences[frameCounter], true, -1);
@@ -86,11 +83,11 @@ public class Vulkan implements GraphicsProvider {
             return;
         }
 
-        if(imagesInFlight[currentFrame[0]] != VK_NULL_HANDLE) {
+        if (imagesInFlight[currentFrame[0]] != VK_NULL_HANDLE) {
             vkWaitForFences(device, imagesInFlight[currentFrame[0]], true, -1);
         }
         imagesInFlight[currentFrame[0]] = fences[frameCounter];
-        try(MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer waitSemaphore = stack.mallocLong(1).put(imageAvailableSemaphore[frameCounter]).rewind();
             LongBuffer signalSemaphore = stack.mallocLong(1).put(renderFinishedSemaphore[frameCounter]).rewind();
             IntBuffer waitStages = stack.mallocInt(1).put(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT).rewind();
@@ -103,7 +100,7 @@ public class Vulkan implements GraphicsProvider {
                     .pCommandBuffers(stack.mallocPointer(1).put(commandBuffers[currentFrame[0]].address()).rewind());
 
             vkResetFences(device, fences[frameCounter]);
-            _CHECK_(vkQueueSubmit(graphicsQueue,  frameSubmitInfo, fences[frameCounter]), "failed to submit draw command buffer");
+            _CHECK_(vkQueueSubmit(graphicsQueue, frameSubmitInfo, fences[frameCounter]), "failed to submit draw command buffer");
             var presentInfo = VkPresentInfoKHR.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_PRESENT_INFO_KHR)
                     .pWaitSemaphores(signalSemaphore.rewind())
@@ -112,7 +109,7 @@ public class Vulkan implements GraphicsProvider {
                     .pImageIndices(stack.mallocInt(1).put(currentFrame[0]).rewind());
 
             var presentResult = vkQueuePresentKHR(presentationQueue, presentInfo);
-            if(presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) windowResizeUpdate();
+            if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) windowResizeUpdate();
             else _CHECK_(presentResult, "Failed to present image!");
             frameCounter = (frameCounter + 1) % framebuffers.length;
             // vkDeviceWaitIdle(device);
@@ -124,7 +121,7 @@ public class Vulkan implements GraphicsProvider {
         int[] width = new int[1];
         int[] height = new int[1];
         glfwGetFramebufferSize(glfwWindow, width, height);
-        while(width[0] == 0 || height[0] == 0) {
+        while (width[0] == 0 || height[0] == 0) {
             glfwWaitEvents();
             glfwGetFramebufferSize(glfwWindow, width, height);
         }
@@ -142,14 +139,14 @@ public class Vulkan implements GraphicsProvider {
     }
 
     public void destroySwapchain() {
-        if(framebuffers != null)
-            for(int i = 0; i < framebuffers.length; i++) {
+        if (framebuffers != null)
+            for (int i = 0; i < framebuffers.length; i++) {
                 vkDestroySemaphore(device, imageAvailableSemaphore[i], null);
                 vkDestroySemaphore(device, renderFinishedSemaphore[i], null);
                 vkDestroyFence(device, fences[i], null);
             }
-        if(commandPool != VK_NULL_HANDLE) vkDestroyCommandPool(device, commandPool, null);
-        if(framebuffers != null)
+        if (commandPool != VK_NULL_HANDLE) vkDestroyCommandPool(device, commandPool, null);
+        if (framebuffers != null)
             for (long framebuffer : framebuffers) {
                 vkDestroyFramebuffer(device, framebuffer, null);
             }
@@ -159,26 +156,26 @@ public class Vulkan implements GraphicsProvider {
 
     @Override
     public void cleanup() {
-        if(device != null) {
+        if (device != null) {
             vkDeviceWaitIdle(device);
 
             destroySwapchain();
 
-            if(vertexBuffer != null) vertexBuffer.free(device);
+            if (vertexBuffer != null) vertexBuffer.free(device);
 
-            for(var shader: shaders) {
+            for (var shader : shaders) {
                 shader.close();
             }
 
             vkDestroyDevice(device, null);
         }
 
-        if(surfaceKHR != VK_NULL_HANDLE) vkDestroySurfaceKHR(instance, surfaceKHR, null);
+        if (surfaceKHR != VK_NULL_HANDLE) vkDestroySurfaceKHR(instance, surfaceKHR, null);
 
-        if(ENABLE_VALIDATION && vkDebugUtilsMessenger != VK_NULL_HANDLE)
+        if (ENABLE_VALIDATION && vkDebugUtilsMessenger != VK_NULL_HANDLE)
             EXTDebugUtils.vkDestroyDebugUtilsMessengerEXT(instance, vkDebugUtilsMessenger, null);
 
-        if(instance != null) vkDestroyInstance(instance, null);
+        if (instance != null) vkDestroyInstance(instance, null);
     }
 
     private void createInstance() {
@@ -229,7 +226,7 @@ public class Vulkan implements GraphicsProvider {
                 throw new AssertionError("Requested validation layers not present!");
             }
 
-            if(ENABLE_VALIDATION) {
+            if (ENABLE_VALIDATION) {
                 // and enable them
                 PointerBuffer pVkRequiredLayers = stack.mallocPointer(validationLayers.length);
                 for (CharSequence layer : validationLayers) {
@@ -284,14 +281,14 @@ public class Vulkan implements GraphicsProvider {
                     .queueFamilyIndex(gpu.graphicsIndex)
                     .pQueuePriorities(stack.floats(1.0f));
 
-            if(gpu.presentIndex != gpu.graphicsIndex) {
+            if (gpu.presentIndex != gpu.graphicsIndex) {
                 var presentQueueInfo = queueCreateInfos.get();
                 presentQueueInfo.sType(VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO)
                         .queueFamilyIndex(gpu.presentIndex)
                         .pQueuePriorities(stack.floats(1.0f));
 
             }
-            if(gpu.transferIndex != gpu.graphicsIndex) {
+            if (gpu.transferIndex != gpu.graphicsIndex) {
                 var transferQueueInfo = queueCreateInfos.get();
                 transferQueueInfo.sType(VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO)
                         .queueFamilyIndex(gpu.transferIndex)
@@ -300,7 +297,7 @@ public class Vulkan implements GraphicsProvider {
             queueCreateInfos.rewind();
 
             PointerBuffer ppDeviceExtensionNames = stack.mallocPointer(deviceRequiredExtensions.length);
-            for(CharSequence str : deviceRequiredExtensions) {
+            for (CharSequence str : deviceRequiredExtensions) {
                 ppDeviceExtensionNames.put(stack.UTF8(str, true));
             }
             ppDeviceExtensionNames.rewind();
@@ -325,16 +322,16 @@ public class Vulkan implements GraphicsProvider {
             vkGetDeviceQueue(device, gpu.graphicsIndex, 0, pGraphQueue);
             graphicsQueue = new VkQueue(pGraphQueue.get(0), device);
 
-            if(gpu.presentIndex != gpu.graphicsIndex) {
+            if (gpu.presentIndex != gpu.graphicsIndex) {
                 PointerBuffer pPresentQueue = stack.mallocPointer(1);
-                vkGetDeviceQueue(device, gpu.presentIndex,0,pPresentQueue);
-                presentationQueue = new VkQueue(pPresentQueue.get(0),device);
+                vkGetDeviceQueue(device, gpu.presentIndex, 0, pPresentQueue);
+                presentationQueue = new VkQueue(pPresentQueue.get(0), device);
             } else presentationQueue = graphicsQueue;
 
-            if(gpu.transferIndex != gpu.graphicsIndex) {
+            if (gpu.transferIndex != gpu.graphicsIndex) {
                 PointerBuffer pTransferQueue = stack.mallocPointer(1);
-                vkGetDeviceQueue(device, gpu.presentIndex,0,pTransferQueue);
-                transferQueue = new VkQueue(pTransferQueue.get(0),device);
+                vkGetDeviceQueue(device, gpu.presentIndex, 0, pTransferQueue);
+                transferQueue = new VkQueue(pTransferQueue.get(0), device);
             } else transferQueue = graphicsQueue;
         }
     }
@@ -352,9 +349,9 @@ public class Vulkan implements GraphicsProvider {
     }
 
     private void createFramebuffers() {
-        try(MemoryStack stack = MemoryStack.stackPush()) {
-            framebuffers = new long[swapchain.imageViews.length()];
-            for(int i = 0; i < framebuffers.length; i++) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            framebuffers = new long[swapchain.imageViews.size()];
+            for (int i = 0; i < framebuffers.length; i++) {
                 LongBuffer imageView = stack.mallocLong(1).put(swapchain.imageViews.get(i)).rewind();
                 var framebufferInfo = VkFramebufferCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO)
@@ -366,14 +363,14 @@ public class Vulkan implements GraphicsProvider {
                         .layers(1);
 
                 LongBuffer pp_framebuffer = stack.mallocLong(1);
-                _CHECK_(vkCreateFramebuffer(device, framebufferInfo, null, pp_framebuffer),"Failed to create framebuffer on index " + i);
+                _CHECK_(vkCreateFramebuffer(device, framebufferInfo, null, pp_framebuffer), "Failed to create framebuffer on index " + i);
                 framebuffers[i] = pp_framebuffer.get(0);
             }
         }
     }
 
     private void createCommandPool() {
-        try(MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
             var createInfo = VkCommandPoolCreateInfo.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO)
                     .queueFamilyIndex(gpu.graphicsIndex);
@@ -389,8 +386,8 @@ public class Vulkan implements GraphicsProvider {
                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                 VK_SHARING_MODE_EXCLUSIVE,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-                );
-        try(MemoryStack stack = MemoryStack.stackPush()) {
+        );
+        try (MemoryStack stack = MemoryStack.stackPush()) {
             PointerBuffer data = stack.mallocPointer(1);
             vkMapMemory(device, vertexBuffer.backingMemory, 0, size, 0, data);
             memCopy(data, size);
@@ -400,7 +397,7 @@ public class Vulkan implements GraphicsProvider {
 
     private void createCommandBuffers() {
         commandBuffers = new VkCommandBuffer[framebuffers.length];
-        try(MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
             var allocInfo = VkCommandBufferAllocateInfo.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO)
                     .commandPool(commandPool)
@@ -408,7 +405,7 @@ public class Vulkan implements GraphicsProvider {
                     .commandBufferCount(commandBuffers.length);
             var p_buffers = stack.mallocPointer(commandBuffers.length);
             _CHECK_(vkAllocateCommandBuffers(device, allocInfo, p_buffers), "Failed to allocate command buffers.");
-            for(int i = 0; i < commandBuffers.length; i++) {
+            for (int i = 0; i < commandBuffers.length; i++) {
                 commandBuffers[i] = new VkCommandBuffer(p_buffers.get(i), device);
 
                 var beginInfo = VkCommandBufferBeginInfo.calloc(stack)
@@ -420,14 +417,14 @@ public class Vulkan implements GraphicsProvider {
                         .sType(VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO)
                         .renderPass(pipeline.getRenderPass())
                         .framebuffer(framebuffers[i]);
-                renderPassInfo.renderArea().offset().set(0,0);
+                renderPassInfo.renderArea().offset().set(0, 0);
                 renderPassInfo.renderArea().extent(swapchain.getExtent());
 
                 var clearColor = VkClearValue.calloc(1, stack);
-                clearColor.color().float32(0,0f)
-                        .float32(1,0f)
-                        .float32(2,0f)
-                        .float32(3,1f);
+                clearColor.color().float32(0, 0f)
+                        .float32(1, 0f)
+                        .float32(2, 0f)
+                        .float32(3, 1f);
 
                 renderPassInfo.clearValueCount(1)
                         .pClearValues(clearColor);
@@ -435,9 +432,9 @@ public class Vulkan implements GraphicsProvider {
                 vkCmdBeginRenderPass(commandBuffers[i], renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
                 vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.p_pipeline);
                 vkCmdBindVertexBuffers(commandBuffers[i], 0, new long[]{vertexBuffer.buffer}, new long[]{0});
-                vkCmdDraw(commandBuffers[i], VkVertex.VERTICES.length,1,0,0);
+                vkCmdDraw(commandBuffers[i], VkVertex.VERTICES.length, 1, 0, 0);
                 vkCmdEndRenderPass(commandBuffers[i]);
-                _CHECK_(vkEndCommandBuffer(commandBuffers[i]), "Failed to record command buffer at index "+i);
+                _CHECK_(vkEndCommandBuffer(commandBuffers[i]), "Failed to record command buffer at index " + i);
             }
         }
     }
@@ -448,14 +445,14 @@ public class Vulkan implements GraphicsProvider {
         fences = new long[framebuffers.length];
         imagesInFlight = new long[framebuffers.length];
         Arrays.fill(imagesInFlight, VK_NULL_HANDLE);
-        try(MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
             var semaphoreCreateInfo = VkSemaphoreCreateInfo.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO);
             var fenceCreateInfo = VkFenceCreateInfo.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO)
                     .flags(VK_FENCE_CREATE_SIGNALED_BIT);
             LongBuffer pointer = stack.mallocLong(1);
-            for(int i = 0; i < framebuffers.length; i++) {
+            for (int i = 0; i < framebuffers.length; i++) {
                 _CHECK_(vkCreateSemaphore(device, semaphoreCreateInfo, null, pointer.rewind()), "Failed to create semaphores.");
                 imageAvailableSemaphore[i] = pointer.get(0);
                 _CHECK_(vkCreateSemaphore(device, semaphoreCreateInfo, null, pointer.rewind()), "Failed to create semaphores.");
@@ -466,6 +463,7 @@ public class Vulkan implements GraphicsProvider {
         }
     }
 
+    @SuppressWarnings("unused")
     public static int VkDebugMessengerCallback(int messageSeverity, int messageTypes, long pCallbackData, long pUserData) {
         VkDebugUtilsMessengerCallbackDataEXT data = VkDebugUtilsMessengerCallbackDataEXT.create(pCallbackData);
         AtomikVk.LOGGER.error("VK DEBUG: " + data.pMessageString());
@@ -502,13 +500,13 @@ public class Vulkan implements GraphicsProvider {
 
     private void memCopy(PointerBuffer dest, long size) {
         var buffer = dest.getByteBuffer(0, (int) size);
-        for(var v : VkVertex.VERTICES) {
-            buffer.putFloat(v.pos.x());
-            buffer.putFloat(v.pos.y());
+        for (var v : VkVertex.VERTICES) {
+            buffer.putFloat(v.pos().x());
+            buffer.putFloat(v.pos().y());
 
-            buffer.putFloat(v.color.x());
-            buffer.putFloat(v.color.y());
-            buffer.putFloat(v.color.z());
+            buffer.putFloat(v.color().x());
+            buffer.putFloat(v.color().y());
+            buffer.putFloat(v.color().z());
         }
     }
 

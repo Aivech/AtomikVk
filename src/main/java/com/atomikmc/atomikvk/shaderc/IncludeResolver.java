@@ -10,6 +10,7 @@ import java.nio.file.Files;
 
 public class IncludeResolver implements ShadercIncludeResolveI {
     private final File[] includeDirectories;
+
     public IncludeResolver(File... directories) {
         includeDirectories = directories;
     }
@@ -19,15 +20,15 @@ public class IncludeResolver implements ShadercIncludeResolveI {
     public long invoke(long user_data, long requested_source, int type, long requesting_source, long include_depth) {
         ShadercIncludeResult include = ShadercIncludeResult.calloc();
         String request = MemoryUtil.memUTF8(requested_source);
-        for(File dir: includeDirectories) {
-            for(File file: dir.listFiles()) {
-                if(file.getName().equals(request)) {
+        for (File dir : includeDirectories) {
+            for (File file : dir.listFiles()) {
+                if (file.getName().equals(request)) {
                     try {
-                       ByteBuffer glsl = MemoryUtil.memUTF8(Files.readString(file.toPath()));
-                       include.content(glsl);
-                       include.source_name(MemoryUtil.memByteBufferNT1(requested_source));
+                        ByteBuffer glsl = MemoryUtil.memUTF8(Files.readString(file.toPath()));
+                        include.content(glsl);
+                        include.source_name(MemoryUtil.memByteBufferNT1(requested_source));
                     } catch (IOException e) {
-                        throw new ShaderException("Exception while loading include file \"" + request + "\" for \"" + MemoryUtil.memUTF8(requesting_source)+"\"", e);
+                        throw new ShaderException("Exception while loading include file \"" + request + "\" for \"" + MemoryUtil.memUTF8(requesting_source) + "\"", e);
                     }
                 }
             }
@@ -40,7 +41,7 @@ public class IncludeResolver implements ShadercIncludeResolveI {
         public void invoke(long user_data, long include_result) {
             ShadercIncludeResult result = ShadercIncludeResult.create(include_result);
             ByteBuffer glsl = result.content();
-            if(glsl != null) MemoryUtil.memFree(glsl);
+            MemoryUtil.memFree(glsl);
             result.free();
         }
     }

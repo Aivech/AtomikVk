@@ -13,7 +13,7 @@ class GraphicsBuffer {
     final long buffer;
 
     GraphicsBuffer(PhysicalDevice gpu, VkDevice device, long size, int vkUsageFlags, int vkShareMode, int propertyFlags) {
-        try(MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
             var bufferInfo = VkBufferCreateInfo.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO)
                     .size(size)
@@ -38,16 +38,17 @@ class GraphicsBuffer {
     }
 
     public void free(VkDevice device) {
-        if(buffer != VK_NULL_HANDLE) vkDestroyBuffer(device, buffer, null);
-        if(backingMemory != VK_NULL_HANDLE) vkFreeMemory(device, backingMemory, null);
+        if (buffer != VK_NULL_HANDLE) vkDestroyBuffer(device, buffer, null);
+        if (backingMemory != VK_NULL_HANDLE) vkFreeMemory(device, backingMemory, null);
     }
 
     private static int findMemoryType(PhysicalDevice gpu, int filter, int propertyFlags) {
-        try(MemoryStack stack = MemoryStack.stackPush()) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
             var memProperties = VkPhysicalDeviceMemoryProperties.malloc(stack);
             vkGetPhysicalDeviceMemoryProperties(gpu.device, memProperties);
             for (int i = 0; i < memProperties.memoryTypeCount(); i++) {
-                if ((filter & (1 << i)) != 0 && (memProperties.memoryTypes(i).propertyFlags() & propertyFlags) != 0) return i;
+                if ((filter & (1 << i)) != 0 && (memProperties.memoryTypes(i).propertyFlags() & propertyFlags) != 0)
+                    return i;
             }
         }
         throw new RuntimeException("Failed to find suitable memory type!");

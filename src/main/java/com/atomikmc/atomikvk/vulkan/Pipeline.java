@@ -1,14 +1,11 @@
 package com.atomikmc.atomikvk.vulkan;
 
 import com.atomikmc.atomikvk.common.resource.ShaderResource;
-import com.atomikmc.atomikvk.shaderc.ShaderException;
 import com.atomikmc.atomikvk.shaderc.SpirVCompiler;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
-import java.io.File;
-import java.io.IOException;
 import java.nio.LongBuffer;
 
 import static com.atomikmc.atomikvk.vulkan.Vulkan._CHECK_;
@@ -21,10 +18,10 @@ public class Pipeline {
     final long p_pipeline;
 
     Pipeline(VkDevice device, Swapchain swapchain, ShaderResource... shaderResources) {
-        try(MemoryStack stack = stackPush()) {
+        try (MemoryStack stack = stackPush()) {
             Shader[] shaders = new Shader[shaderResources.length];
             var p_stages = VkPipelineShaderStageCreateInfo.calloc(shaderResources.length, stack);
-            for(int i = 0; i < shaders.length; i++) {
+            for (int i = 0; i < shaders.length; i++) {
                 shaders[i] = new Shader(device, shaderResources[i]);
                 p_stages.put(shaders[i].stageCreateInfo);
             }
@@ -42,11 +39,11 @@ public class Pipeline {
 
             var p_viewport = VkViewport.calloc(1, stack)
                     .x(0.0f).y(0.0f)
-                    .width((float)swapchain.width())
-                    .height((float)swapchain.height())
+                    .width((float) swapchain.width())
+                    .height((float) swapchain.height())
                     .minDepth(0.0f).maxDepth(1.0f);
 
-            var scissorOffset = VkOffset2D.calloc(stack).set(0,0);
+            var scissorOffset = VkOffset2D.calloc(stack).set(0, 0);
             var p_scissor = VkRect2D.calloc(1, stack)
                     .offset(scissorOffset)
                     .extent(swapchain.getExtent());
@@ -108,13 +105,15 @@ public class Pipeline {
             _CHECK_(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, p_createInfo, null, pp_pipeline), "Failed to create graphics pipeline.");
             p_pipeline = pp_pipeline.get(0);
 
-            for(int i = 0; i < shaders.length; i++) {
-                shaders[i].free(device);
+            for (Shader shader : shaders) {
+                shader.free(device);
             }
         }
     }
 
-    long getRenderPass() { return renderPass.vkRenderPass; }
+    long getRenderPass() {
+        return renderPass.vkRenderPass;
+    }
 
     void destroy(VkDevice device) {
         vkDestroyPipeline(device, p_pipeline, null);
@@ -122,14 +121,12 @@ public class Pipeline {
         renderPass.free(device);
     }
 
-    private class Shader {
-        private final ShaderResource shader;
+    private static class Shader {
         private final long pVkShaderModule;
         private final VkPipelineShaderStageCreateInfo stageCreateInfo;
 
-        private Shader (VkDevice device, ShaderResource shader) {
-            try(MemoryStack stack = stackPush()) {
-                this.shader = shader;
+        private Shader(VkDevice device, ShaderResource shader) {
+            try (MemoryStack stack = stackPush()) {
                 VkShaderModuleCreateInfo createInfo = VkShaderModuleCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO)
                         .pCode(shader.getBytes());
@@ -152,12 +149,12 @@ public class Pipeline {
         }
     }
 
-    private class RenderPass{
+    private static class RenderPass {
         private final long vkRenderPass;
 
         RenderPass(VkDevice device, Swapchain swapchain) {
-            try(MemoryStack stack = stackPush()) {
-                var p_colorAttach = VkAttachmentDescription.calloc(1,stack)
+            try (MemoryStack stack = stackPush()) {
+                var p_colorAttach = VkAttachmentDescription.calloc(1, stack)
                         .format(swapchain.getImageFormat())
                         .samples(VK_SAMPLE_COUNT_1_BIT)
                         .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
@@ -198,7 +195,7 @@ public class Pipeline {
         }
 
         private void free(VkDevice device) {
-            vkDestroyRenderPass(device, vkRenderPass, null );
+            vkDestroyRenderPass(device, vkRenderPass, null);
         }
     }
 
