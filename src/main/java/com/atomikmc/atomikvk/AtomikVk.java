@@ -14,6 +14,9 @@ public class AtomikVk {
             long window = GLFWHelper.glfwSetupWindow();
             GLFWHelper.startWindowLoop();
 
+        } catch(Throwable e) {
+            LOGGER.fatal("Fatal error.", e);
+            throw e;
         } finally {
             GLFWHelper.glfwCleanup();
         }

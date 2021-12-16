@@ -27,9 +27,9 @@ class Swapchain {
     final ImmutableLongArray imageViews;
 
 
-    Swapchain(long glfwWindow, VkPhysicalDevice gpu, VkDevice device, long vkSurface, int graphicsFamily, int presentationFamily) {
+    Swapchain(long glfwWindow, PhysicalDevice gpu, VkDevice device, long vkSurface) {
         try(MemoryStack stack = stackPush()) {
-            details = new Details(gpu, vkSurface, glfwWindow);
+            details = new Details(gpu.device, vkSurface, glfwWindow);
             format = details.chooseSurfaceFormat();
             presentMode = details.choosePresentMode(VK_PRESENT_MODE_MAILBOX_KHR);
             extent = details.extent;
@@ -38,6 +38,10 @@ class Swapchain {
             if (details.capabilities.maxImageCount() > 0 && imageCount > details.capabilities.maxImageCount()) {
                 imageCount = details.capabilities.maxImageCount();
             }
+            int queueCount = gpu.graphicsIndex != gpu.presentIndex ? 2 : 1;
+            var queues = stack.mallocInt(queueCount).put(gpu.graphicsIndex);
+            if(queueCount == 2) queues.put(gpu.presentIndex);
+            queues.rewind();
             VkSwapchainCreateInfoKHR createInfo = VkSwapchainCreateInfoKHR.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR)
                     .surface(vkSurface)
@@ -47,7 +51,9 @@ class Swapchain {
                     .minImageCount(imageCount)
                     .imageArrayLayers(1) // values >1 used for VR
                     .imageUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
-                    .imageSharingMode(graphicsFamily != presentationFamily ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE)
+                    .imageSharingMode(gpu.graphicsIndex != gpu.presentIndex ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE)
+                    .queueFamilyIndexCount(queueCount)
+                    .pQueueFamilyIndices(queues)
                     .preTransform(details.capabilities.currentTransform()) // do nothing
                     .compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)     // window is not transparent
                     .presentMode(presentMode)
@@ -112,18 +118,6 @@ class Swapchain {
         }
         details.destroy();
         vkDestroySwapchainKHR(device, pSwapchain, null);
-    }
-
-    static boolean verifyDeviceSupport(VkPhysicalDevice gpu, long vkSurface) {
-        try (MemoryStack stack = stackPush()) {
-            IntBuffer pFormatCount = stack.mallocInt(1);
-            vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, vkSurface, pFormatCount, null);
-
-            IntBuffer pPresentModeCount = stack.mallocInt(1);
-            vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, vkSurface, pPresentModeCount, null);
-
-            return pFormatCount.get(0) != 0 && pPresentModeCount.get(0) != 0;
-        }
     }
 
     static private class Details {
