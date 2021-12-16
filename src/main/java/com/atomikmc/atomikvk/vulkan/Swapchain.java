@@ -11,7 +11,7 @@ import org.lwjgl.vulkan.*;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 
-import static com.atomikmc.atomikvk.vulkan.VulkanHelper._CHECK_;
+import static com.atomikmc.atomikvk.vulkan.Vulkan._CHECK_;
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.*;
 import static org.lwjgl.vulkan.VK10.*;
