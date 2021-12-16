@@ -50,8 +50,7 @@ public class Vulkan implements GraphicsProvider {
     private Pipeline pipeline;
     private long[] framebuffers;
     private long commandPool;
-    private long vertexBuffer;
-    private long vertexBufMem;
+    private GraphicsBuffer vertexBuffer;
     private VkCommandBuffer[] commandBuffers;
     private long[] imageAvailableSemaphore;
     private long[] renderFinishedSemaphore;
@@ -165,8 +164,7 @@ public class Vulkan implements GraphicsProvider {
 
             destroySwapchain();
 
-            if(vertexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(device, vertexBuffer, null);
-            if(vertexBufMem != VK_NULL_HANDLE) vkFreeMemory(device, vertexBufMem, null);
+            if(vertexBuffer != null) vertexBuffer.free(device);
 
             for(var shader: shaders) {
                 shader.close();
@@ -386,33 +384,17 @@ public class Vulkan implements GraphicsProvider {
     }
 
     private void createVertexBuffer() {
+        var size = VkVertex.SIZE * VkVertex.VERTICES.length;
+        vertexBuffer = new GraphicsBuffer(gpu, device, size,
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                VK_SHARING_MODE_EXCLUSIVE,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                );
         try(MemoryStack stack = MemoryStack.stackPush()) {
-            var bufferInfo = VkBufferCreateInfo.calloc(stack)
-                    .sType(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO)
-                    .size(VkVertex.SIZE * VkVertex.VERTICES.length)
-                    .usage(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
-                    .sharingMode(VK_SHARING_MODE_EXCLUSIVE);
-            var p_buffer = stack.mallocLong(1);
-            _CHECK_(vkCreateBuffer(device, bufferInfo, null, p_buffer), "Failed to create vertex buffer.");
-            vertexBuffer = p_buffer.get(0);
-
-            var bufMemRequirements = VkMemoryRequirements.malloc(stack);
-            vkGetBufferMemoryRequirements(device, vertexBuffer, bufMemRequirements);
-
-            var bufAllocInfo = VkMemoryAllocateInfo.calloc(stack)
-                    .sType(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO)
-                    .allocationSize(bufMemRequirements.size())
-                    .memoryTypeIndex(findMemoryType(bufMemRequirements.memoryTypeBits(),
-                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
-            LongBuffer p_vertexBufMem = stack.mallocLong(1);
-            _CHECK_(vkAllocateMemory(device, bufAllocInfo, null, p_vertexBufMem), "Failed to allocate memory for vertex buffer.");
-            vertexBufMem = p_vertexBufMem.get(0);
-            vkBindBufferMemory(device, vertexBuffer, vertexBufMem, 0);
-
             PointerBuffer data = stack.mallocPointer(1);
-            vkMapMemory(device, vertexBufMem, 0, bufferInfo.size(), 0, data);
-            memCopy(data, bufferInfo.size());
-            vkUnmapMemory(device, vertexBufMem);
+            vkMapMemory(device, vertexBuffer.backingMemory, 0, size, 0, data);
+            memCopy(data, size);
+            vkUnmapMemory(device, vertexBuffer.backingMemory);
         }
     }
 
@@ -452,7 +434,7 @@ public class Vulkan implements GraphicsProvider {
 
                 vkCmdBeginRenderPass(commandBuffers[i], renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
                 vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.p_pipeline);
-                vkCmdBindVertexBuffers(commandBuffers[i], 0, new long[]{vertexBuffer}, new long[]{0});
+                vkCmdBindVertexBuffers(commandBuffers[i], 0, new long[]{vertexBuffer.buffer}, new long[]{0});
                 vkCmdDraw(commandBuffers[i], VkVertex.VERTICES.length,1,0,0);
                 vkCmdEndRenderPass(commandBuffers[i]);
                 _CHECK_(vkEndCommandBuffer(commandBuffers[i]), "Failed to record command buffer at index "+i);
@@ -516,17 +498,6 @@ public class Vulkan implements GraphicsProvider {
             }
             return count == validationLayers.length;
         }
-    }
-
-    private int findMemoryType(int filter, int propertyFlags) {
-        try(MemoryStack stack = MemoryStack.stackPush()) {
-            var memProperties = VkPhysicalDeviceMemoryProperties.malloc(stack);
-            vkGetPhysicalDeviceMemoryProperties(gpu.device, memProperties);
-            for (int i = 0; i < memProperties.memoryTypeCount(); i++) {
-                if ((filter & (1 << i)) != 0 && (memProperties.memoryTypes(i).propertyFlags() & propertyFlags) != 0) return i;
-            }
-        }
-        throw new RuntimeException("Failed to find suitable memory type!");
     }
 
     private void memCopy(PointerBuffer dest, long size) {
