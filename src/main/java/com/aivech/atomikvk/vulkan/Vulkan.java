@@ -1,9 +1,9 @@
-package com.atomikmc.atomikvk.vulkan;
+package com.aivech.atomikvk.vulkan;
 
-import com.atomikmc.atomikvk.AtomikVk;
-import com.atomikmc.atomikvk.common.GraphicsProvider;
-import com.atomikmc.atomikvk.common.resource.ShaderResource;
-import com.atomikmc.atomikvk.shaderc.ShaderException;
+import com.aivech.atomikvk.common.GraphicsProvider;
+import com.aivech.atomikvk.AtomikVk;
+import com.aivech.atomikvk.common.resource.ShaderResource;
+import com.aivech.atomikvk.shaderc.ShaderException;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFWVulkan;
 import org.lwjgl.system.MemoryStack;
@@ -65,7 +65,7 @@ public class Vulkan implements GraphicsProvider {
         createLogicalDevice();
         getQueues();
         loadInitialResources();
-        swapchain = new com.atomikmc.atomikvk.vulkan.Swapchain(window, gpu, device, surfaceKHR);
+        swapchain = new Swapchain(window, gpu, device, surfaceKHR);
         pipeline = new Pipeline(device, swapchain, shaders);
         createFramebuffers();
         createCommandPool();

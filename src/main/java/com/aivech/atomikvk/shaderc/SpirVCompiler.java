@@ -1,6 +1,6 @@
-package com.atomikmc.atomikvk.shaderc;
+package com.aivech.atomikvk.shaderc;
 
-import com.atomikmc.atomikvk.common.resource.ShaderType;
+import com.aivech.atomikvk.common.resource.ShaderType;
 
 import java.io.File;
 import java.io.IOException;

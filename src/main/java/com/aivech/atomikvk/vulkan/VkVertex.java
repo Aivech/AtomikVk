@@ -1,4 +1,4 @@
-package com.atomikmc.atomikvk.vulkan;
+package com.aivech.atomikvk.vulkan;
 
 import org.joml.Vector2f;
 import org.joml.Vector2fc;

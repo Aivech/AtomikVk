@@ -1,4 +1,4 @@
-package com.atomikmc.atomikvk.common;
+package com.aivech.atomikvk.common;
 
 public interface GraphicsProvider {
     void init(long window);

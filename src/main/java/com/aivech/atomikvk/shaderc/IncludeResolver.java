@@ -1,4 +1,4 @@
-package com.atomikmc.atomikvk.shaderc;
+package com.aivech.atomikvk.shaderc;
 
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.shaderc.*;
