@@ -38,33 +38,41 @@ public record VkVertex(Vector2fc pos, Vector3fc color) {
     }
 
     static final VkVertex[] VERTICES = {
-            new VkVertex(new Vector2f(0.0f, 0.25f), new Vector3f(0.0f, 0.0f, 1.0f)),
-            new VkVertex(new Vector2f(-0.25f, -0.25f), new Vector3f(1.0f, 0.0f, 0.0f)),
-            new VkVertex(new Vector2f(0.25f, -0.25f), new Vector3f(0.0f, 1.0f, 0.0f)),
+            new VkVertex(new Vector2f(-.25f, -.25f - .625f), new Vector3f(1f,0f,0f)),
+            new VkVertex(new Vector2f(.25f, -.25f - .625f), new Vector3f(0f,1f,0f)),
+            new VkVertex(new Vector2f(.25f, .25f - .625f), new Vector3f(0f,0f,1f)),
+            new VkVertex(new Vector2f(-.25f, .25f - .625f), new Vector3f(1f,1f,1f)),
 
-            new VkVertex(new Vector2f(0.0f, -0.25f + .625f), new Vector3f(0.0f, 0.0f, 1.0f)),
-            new VkVertex(new Vector2f(0.25f, 0.25f + .625f), new Vector3f(0.0f, 1.0f, 1.0f)),
-            new VkVertex(new Vector2f(-0.25f, 0.25f + .625f), new Vector3f(1.0f, 0.0f, 1.0f)),
+            // bottom center
+            new VkVertex(new Vector2f(0.0f, -0.25f + .625f), new Vector3f(1.0f, 1.0f, 1.0f)),
+            new VkVertex(new Vector2f(0.25f, 0.25f + .625f), new Vector3f(0.5f, .5f, .5f)),
+            new VkVertex(new Vector2f(-0.25f, 0.25f + .625f), new Vector3f(0f, 0.0f, 0f)),
 
-            new VkVertex(new Vector2f(0.0f, -0.25f - .625f), new Vector3f(1.0f, 1.0f, 0.0f)),
-            new VkVertex(new Vector2f(0.25f, 0.25f - .625f), new Vector3f(0.0f, 1.0f, 0.0f)),
-            new VkVertex(new Vector2f(-0.25f, 0.25f - .625f), new Vector3f(1.0f, 0.0f, 0.0f)),
+            // bottom left
+            new VkVertex(new Vector2f(0.0f - .625f, -0.25f + .5f), new Vector3f(1.0f, 0f, 0.0f)),
+            new VkVertex(new Vector2f(0.25f - .625f, 0.25f + .5f), new Vector3f(1.0f, 1f, 0f)),
+            new VkVertex(new Vector2f(-0.25f - .625f, 0.25f + .5f), new Vector3f(1f, 0f, 1.0f)),
 
-            new VkVertex(new Vector2f(0.0f - .625f, -0.25f + .5f), new Vector3f(1.0f, 1.0f, 0.0f)),
-            new VkVertex(new Vector2f(0.25f - .625f, 0.25f + .5f), new Vector3f(1.0f, 0.0f, 1.0f)),
-            new VkVertex(new Vector2f(-0.25f - .625f, 0.25f + .5f), new Vector3f(0.0f, 1.0f, 1.0f)),
-
-            new VkVertex(new Vector2f(0.0f + .625f, -0.25f + .5f), new Vector3f(1.0f, 1.0f, 0.0f)),
-            new VkVertex(new Vector2f(0.25f + .625f, 0.25f + .5f), new Vector3f(1.0f, 0.0f, 1.0f)),
+            // bottom right
+            new VkVertex(new Vector2f(0.0f + .625f, -0.25f + .5f), new Vector3f(0f, 1f, 0.0f)),
+            new VkVertex(new Vector2f(0.25f + .625f, 0.25f + .5f), new Vector3f(1.0f, 1f, 0f)),
             new VkVertex(new Vector2f(-0.25f + .625f, 0.25f + .5f), new Vector3f(0.0f, 1.0f, 1.0f)),
 
-            new VkVertex(new Vector2f(0.0f - .625f, -0.25f - .5f), new Vector3f(1.0f, 1.0f, 0.0f)),
+            // top left
+            new VkVertex(new Vector2f(0.0f - .625f, -0.25f - .5f), new Vector3f(0f, 0f, 1f)),
             new VkVertex(new Vector2f(0.25f - .625f, 0.25f - .5f), new Vector3f(1.0f, 0.0f, 1.0f)),
             new VkVertex(new Vector2f(-0.25f - .625f, 0.25f - .5f), new Vector3f(0.0f, 1.0f, 1.0f)),
 
-            new VkVertex(new Vector2f(0.0f + .625f, -0.25f - .5f), new Vector3f(1.0f, 1.0f, 0.0f)),
-            new VkVertex(new Vector2f(0.25f + .625f, 0.25f - .5f), new Vector3f(1.0f, 0.0f, 1.0f)),
-            new VkVertex(new Vector2f(-0.25f + .625f, 0.25f - .5f), new Vector3f(0.0f, 1.0f, 1.0f)),
+            // top right
+            new VkVertex(new Vector2f(0.0f + .625f, -0.25f - .5f), new Vector3f(1f, .5f, 0.0f)),
+            new VkVertex(new Vector2f(0.25f + .625f, 0.25f - .5f), new Vector3f(1f, 1f, 0f)),
+            new VkVertex(new Vector2f(-0.25f + .625f, 0.25f - .5f), new Vector3f(1f, 0f, 0f)),
+    };
 
+    static final short[] INDICES = {
+            0,1,2,2,3,0,
+            4,5,6,7,8,9,
+            10,11,12,13,14,15,
+            16,17,18
     };
 }

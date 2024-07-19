@@ -4,7 +4,6 @@ import com.aivech.atomikvk.common.GraphicsProvider;
 import com.aivech.atomikvk.AtomikVk;
 import com.aivech.atomikvk.common.resource.ShaderResource;
 import com.aivech.atomikvk.shaderc.ShaderException;
-import com.google.common.graph.Graph;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFWVulkan;
 import org.lwjgl.system.MemoryStack;
@@ -48,7 +47,7 @@ public class Vulkan implements GraphicsProvider {
     private long[] framebuffers;
     private long commandPool;
     private GraphicsBuffer vertexBuffer;
-    private GraphicsBuffer stagingBuffer;
+    private GraphicsBuffer indexBuffer;
     private VkCommandBuffer[] commandBuffers;
     private long[] imageAvailableSemaphore;
     private long[] renderFinishedSemaphore;
@@ -62,7 +61,7 @@ public class Vulkan implements GraphicsProvider {
         glfwWindow = window;
         createInstance();
         setupDebugMessenger();
-        createSurface(window);
+            createSurface(window);
         gpu = PhysicalDevice.selectVkPhysDevice(instance, surfaceKHR, deviceRequiredExtensions);
         createLogicalDevice();
         getQueues();
@@ -72,6 +71,7 @@ public class Vulkan implements GraphicsProvider {
         createFramebuffers();
         createCommandPool();
         createVertexBuffer();
+        createIndexBuffer();
         createCommandBuffers();
         createSyncObjects();
     }
@@ -163,6 +163,7 @@ public class Vulkan implements GraphicsProvider {
 
             destroySwapchain();
 
+            if (indexBuffer != null) indexBuffer.free(device);
             if (vertexBuffer != null) vertexBuffer.free(device);
 
             for (var shader : shaders) {
@@ -384,7 +385,7 @@ public class Vulkan implements GraphicsProvider {
 
     private void createVertexBuffer() {
         var size = VkVertex.SIZE * VkVertex.VERTICES.length;
-        stagingBuffer = new GraphicsBuffer(gpu, device, size,
+        var stagingBuffer = new GraphicsBuffer(gpu, device, size,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                 VK_SHARING_MODE_EXCLUSIVE,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -392,7 +393,7 @@ public class Vulkan implements GraphicsProvider {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             PointerBuffer data = stack.mallocPointer(1);
             vkMapMemory(device, stagingBuffer.backingMemory, 0, size, 0, data);
-            memCopy(data, size);
+            vertexCopy(data, size);
             vkUnmapMemory(device, stagingBuffer.backingMemory);
         }
 
@@ -443,6 +444,32 @@ public class Vulkan implements GraphicsProvider {
         }
     }
 
+    private void createIndexBuffer() {
+        var size = 2 * VkVertex.INDICES.length; // short
+
+        var stagingBuffer = new GraphicsBuffer(gpu, device, size,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VK_SHARING_MODE_EXCLUSIVE,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            PointerBuffer data = stack.mallocPointer(1);
+            vkMapMemory(device, stagingBuffer.backingMemory, 0, size, 0, data);
+            indexCopy(data, size);
+            vkUnmapMemory(device, stagingBuffer.backingMemory);
+        }
+
+        indexBuffer = new GraphicsBuffer(gpu, device, size,
+                VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                VK_SHARING_MODE_EXCLUSIVE,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+
+        copyVkBuffer(stagingBuffer, indexBuffer, size);
+
+        stagingBuffer.free(device);
+    }
+
     private void createCommandBuffers() {
         commandBuffers = new VkCommandBuffer[framebuffers.length];
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -480,7 +507,8 @@ public class Vulkan implements GraphicsProvider {
                 vkCmdBeginRenderPass(commandBuffers[i], renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
                 vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.p_pipeline);
                 vkCmdBindVertexBuffers(commandBuffers[i], 0, new long[]{vertexBuffer.buffer}, new long[]{0});
-                vkCmdDraw(commandBuffers[i], VkVertex.VERTICES.length, 1, 0, 0);
+                vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
+                vkCmdDrawIndexed(commandBuffers[i], VkVertex.INDICES.length, 1, 0, 0, 0);
                 vkCmdEndRenderPass(commandBuffers[i]);
                 _CHECK_(vkEndCommandBuffer(commandBuffers[i]), "Failed to record command buffer at index " + i);
             }
@@ -546,7 +574,7 @@ public class Vulkan implements GraphicsProvider {
         }
     }
 
-    private void memCopy(PointerBuffer dest, long size) {
+    private void vertexCopy(PointerBuffer dest, long size) {
         var buffer = dest.getByteBuffer(0, (int) size);
         for (var v : VkVertex.VERTICES) {
             buffer.putFloat(v.pos().x());
@@ -555,6 +583,13 @@ public class Vulkan implements GraphicsProvider {
             buffer.putFloat(v.color().x());
             buffer.putFloat(v.color().y());
             buffer.putFloat(v.color().z());
+        }
+    }
+
+    private void indexCopy(PointerBuffer dest, long size) {
+        var buffer = dest.getByteBuffer(0, (int) size);
+        for (var i: VkVertex.INDICES) {
+            buffer.putShort(i);
         }
     }
 
