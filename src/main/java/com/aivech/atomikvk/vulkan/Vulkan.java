@@ -47,6 +47,7 @@ public class Vulkan implements GraphicsProvider {
     private long[] framebuffers;
     private long commandPool;
     private GraphicsBuffer vertexBuffer;
+    private GraphicsBuffer indexBuffer;
     private VkCommandBuffer[] commandBuffers;
     private long[] imageAvailableSemaphore;
     private long[] renderFinishedSemaphore;
@@ -60,7 +61,7 @@ public class Vulkan implements GraphicsProvider {
         glfwWindow = window;
         createInstance();
         setupDebugMessenger();
-        createSurface(window);
+            createSurface(window);
         gpu = PhysicalDevice.selectVkPhysDevice(instance, surfaceKHR, deviceRequiredExtensions);
         createLogicalDevice();
         getQueues();
@@ -70,6 +71,7 @@ public class Vulkan implements GraphicsProvider {
         createFramebuffers();
         createCommandPool();
         createVertexBuffer();
+        createIndexBuffer();
         createCommandBuffers();
         createSyncObjects();
     }
@@ -161,6 +163,7 @@ public class Vulkan implements GraphicsProvider {
 
             destroySwapchain();
 
+            if (indexBuffer != null) indexBuffer.free(device);
             if (vertexBuffer != null) vertexBuffer.free(device);
 
             for (var shader : shaders) {
@@ -382,17 +385,89 @@ public class Vulkan implements GraphicsProvider {
 
     private void createVertexBuffer() {
         var size = VkVertex.SIZE * VkVertex.VERTICES.length;
-        vertexBuffer = new GraphicsBuffer(gpu, device, size,
-                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        var stagingBuffer = new GraphicsBuffer(gpu, device, size,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                 VK_SHARING_MODE_EXCLUSIVE,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
         try (MemoryStack stack = MemoryStack.stackPush()) {
             PointerBuffer data = stack.mallocPointer(1);
-            vkMapMemory(device, vertexBuffer.backingMemory, 0, size, 0, data);
-            memCopy(data, size);
-            vkUnmapMemory(device, vertexBuffer.backingMemory);
+            vkMapMemory(device, stagingBuffer.backingMemory, 0, size, 0, data);
+            vertexCopy(data, size);
+            vkUnmapMemory(device, stagingBuffer.backingMemory);
         }
+
+        vertexBuffer = new GraphicsBuffer(gpu, device, size,
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                VK_SHARING_MODE_EXCLUSIVE,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+
+        copyVkBuffer(stagingBuffer, vertexBuffer, size);
+
+        stagingBuffer.free(device);
+
+    }
+
+    private void copyVkBuffer(GraphicsBuffer src, GraphicsBuffer dst, long size) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            var allocInfo = VkCommandBufferAllocateInfo.calloc(stack)
+                    .sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO)
+                    .level(VK_COMMAND_BUFFER_LEVEL_PRIMARY)
+                    .commandPool(commandPool)
+                    .commandBufferCount(1);
+            var pCmdCopyBuffer = stack.mallocPointer(1);
+            _CHECK_(vkAllocateCommandBuffers(device, allocInfo, pCmdCopyBuffer), "Failed to create copy command buffer");
+            var cmdCopyBuffer = new VkCommandBuffer(pCmdCopyBuffer.get(0), device);
+
+            var beginInfo = VkCommandBufferBeginInfo.calloc(stack)
+                    .sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO)
+                    .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+            vkBeginCommandBuffer(cmdCopyBuffer,beginInfo);
+
+            var copyRegion = VkBufferCopy.calloc(1,stack)
+                    .srcOffset(0)
+                    .dstOffset(0)
+                    .size(size);
+
+            vkCmdCopyBuffer(cmdCopyBuffer, src.buffer, dst.buffer, copyRegion);
+            vkEndCommandBuffer(cmdCopyBuffer);
+
+            var submitInfo = VkSubmitInfo.calloc(stack)
+                    .sType(VK_STRUCTURE_TYPE_SUBMIT_INFO)
+                    .pCommandBuffers(pCmdCopyBuffer);
+
+            _CHECK_(vkQueueSubmit(graphicsQueue, submitInfo,VK_NULL_HANDLE), "Could not submit copy command");
+            vkQueueWaitIdle(graphicsQueue);
+
+            vkFreeCommandBuffers(device, commandPool,pCmdCopyBuffer);
+        }
+    }
+
+    private void createIndexBuffer() {
+        var size = 2 * VkVertex.INDICES.length; // short
+
+        var stagingBuffer = new GraphicsBuffer(gpu, device, size,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VK_SHARING_MODE_EXCLUSIVE,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            PointerBuffer data = stack.mallocPointer(1);
+            vkMapMemory(device, stagingBuffer.backingMemory, 0, size, 0, data);
+            indexCopy(data, size);
+            vkUnmapMemory(device, stagingBuffer.backingMemory);
+        }
+
+        indexBuffer = new GraphicsBuffer(gpu, device, size,
+                VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                VK_SHARING_MODE_EXCLUSIVE,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+
+        copyVkBuffer(stagingBuffer, indexBuffer, size);
+
+        stagingBuffer.free(device);
     }
 
     private void createCommandBuffers() {
@@ -432,7 +507,8 @@ public class Vulkan implements GraphicsProvider {
                 vkCmdBeginRenderPass(commandBuffers[i], renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
                 vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.p_pipeline);
                 vkCmdBindVertexBuffers(commandBuffers[i], 0, new long[]{vertexBuffer.buffer}, new long[]{0});
-                vkCmdDraw(commandBuffers[i], VkVertex.VERTICES.length, 1, 0, 0);
+                vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
+                vkCmdDrawIndexed(commandBuffers[i], VkVertex.INDICES.length, 1, 0, 0, 0);
                 vkCmdEndRenderPass(commandBuffers[i]);
                 _CHECK_(vkEndCommandBuffer(commandBuffers[i]), "Failed to record command buffer at index " + i);
             }
@@ -498,7 +574,7 @@ public class Vulkan implements GraphicsProvider {
         }
     }
 
-    private void memCopy(PointerBuffer dest, long size) {
+    private void vertexCopy(PointerBuffer dest, long size) {
         var buffer = dest.getByteBuffer(0, (int) size);
         for (var v : VkVertex.VERTICES) {
             buffer.putFloat(v.pos().x());
@@ -507,6 +583,13 @@ public class Vulkan implements GraphicsProvider {
             buffer.putFloat(v.color().x());
             buffer.putFloat(v.color().y());
             buffer.putFloat(v.color().z());
+        }
+    }
+
+    private void indexCopy(PointerBuffer dest, long size) {
+        var buffer = dest.getByteBuffer(0, (int) size);
+        for (var i: VkVertex.INDICES) {
+            buffer.putShort(i);
         }
     }
 
@@ -525,25 +608,31 @@ public class Vulkan implements GraphicsProvider {
             case VK_EVENT_SET -> "An event is signaled.";
             case VK_EVENT_RESET -> "An event is unsignaled.";
             case VK_INCOMPLETE -> "A return array was too small for the result.";
-            case VK_SUBOPTIMAL_KHR -> "A swapchain no longer matches the surface properties exactly, but can still be used to present to the surface successfully.";
+            case VK_SUBOPTIMAL_KHR ->
+                    "A swapchain no longer matches the surface properties exactly, but can still be used to present to the surface successfully.";
 
             // Error codes
             case VK_ERROR_OUT_OF_HOST_MEMORY -> "A host memory allocation has failed.";
             case VK_ERROR_OUT_OF_DEVICE_MEMORY -> "A device memory allocation has failed.";
-            case VK_ERROR_INITIALIZATION_FAILED -> "Initialization of an object could not be completed for implementation-specific reasons.";
+            case VK_ERROR_INITIALIZATION_FAILED ->
+                    "Initialization of an object could not be completed for implementation-specific reasons.";
             case VK_ERROR_DEVICE_LOST -> "The logical or physical device has been lost.";
             case VK_ERROR_MEMORY_MAP_FAILED -> "Mapping of a memory object has failed.";
             case VK_ERROR_LAYER_NOT_PRESENT -> "A requested layer is not present or could not be loaded.";
             case VK_ERROR_EXTENSION_NOT_PRESENT -> "A requested extension is not supported.";
             case VK_ERROR_FEATURE_NOT_PRESENT -> "A requested feature is not supported.";
-            case VK_ERROR_INCOMPATIBLE_DRIVER -> "The requested version of Vulkan is not supported by the driver or is otherwise incompatible for implementation-specific reasons.";
+            case VK_ERROR_INCOMPATIBLE_DRIVER ->
+                    "The requested version of Vulkan is not supported by the driver or is otherwise incompatible for implementation-specific reasons.";
             case VK_ERROR_TOO_MANY_OBJECTS -> "Too many objects of the type have already been created.";
             case VK_ERROR_FORMAT_NOT_SUPPORTED -> "A requested format is not supported on this device.";
             case VK_ERROR_SURFACE_LOST_KHR -> "A surface is no longer available.";
-            case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR -> "The requested window is already connected to a VkSurfaceKHR, or to some other non-Vulkan API.";
-            case VK_ERROR_OUT_OF_DATE_KHR -> "A surface has changed in such a way that it is no longer compatible with the swapchain, and further presentation requests using the "
-                    + "swapchain will fail. Applications must query the new surface properties and recreate their swapchain if they wish to continue" + "presenting to the surface.";
-            case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR -> "The display used by a swapchain does not use the same presentable image layout, or is incompatible in a way that prevents sharing an" + " image.";
+            case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR ->
+                    "The requested window is already connected to a VkSurfaceKHR, or to some other non-Vulkan API.";
+            case VK_ERROR_OUT_OF_DATE_KHR ->
+                    "A surface has changed in such a way that it is no longer compatible with the swapchain, and further presentation requests using the "
+                            + "swapchain will fail. Applications must query the new surface properties and recreate their swapchain if they wish to continue" + "presenting to the surface.";
+            case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR ->
+                    "The display used by a swapchain does not use the same presentable image layout, or is incompatible in a way that prevents sharing an" + " image.";
             case VK_ERROR_VALIDATION_FAILED_EXT -> "A validation layer found an error.";
             default -> String.format("%s [%d]", "Unknown", result);
         };
