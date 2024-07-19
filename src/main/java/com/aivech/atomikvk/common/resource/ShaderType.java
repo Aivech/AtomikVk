@@ -1,4 +1,4 @@
-package com.atomikmc.atomikvk.common.resource;
+package com.aivech.atomikvk.common.resource;
 
 import org.lwjgl.util.shaderc.Shaderc;
 import static org.lwjgl.vulkan.VK10.*;

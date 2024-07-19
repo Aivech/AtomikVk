@@ -1,14 +1,14 @@
-package com.atomikmc.atomikvk.vulkan;
+package com.aivech.atomikvk.vulkan;
 
-import com.atomikmc.atomikvk.common.resource.ShaderResource;
-import com.atomikmc.atomikvk.shaderc.SpirVCompiler;
+import com.aivech.atomikvk.common.resource.ShaderResource;
+import com.aivech.atomikvk.shaderc.SpirVCompiler;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
 import java.nio.LongBuffer;
 
-import static com.atomikmc.atomikvk.vulkan.Vulkan._CHECK_;
+import static com.aivech.atomikvk.vulkan.Vulkan._CHECK_;
 import static org.lwjgl.system.MemoryStack.*;
 import static org.lwjgl.vulkan.VK10.*;
 

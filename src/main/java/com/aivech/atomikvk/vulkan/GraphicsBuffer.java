@@ -1,11 +1,10 @@
-package com.atomikmc.atomikvk.vulkan;
+package com.aivech.atomikvk.vulkan;
 
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 
 import java.nio.LongBuffer;
 
-import static com.atomikmc.atomikvk.vulkan.Vulkan._CHECK_;
 import static org.lwjgl.vulkan.VK10.*;
 
 class GraphicsBuffer {
@@ -20,7 +19,7 @@ class GraphicsBuffer {
                     .usage(vkUsageFlags)
                     .sharingMode(vkShareMode);
             var p_buffer = stack.mallocLong(1);
-            _CHECK_(vkCreateBuffer(device, bufferInfo, null, p_buffer), "Failed to create vertex buffer.");
+            Vulkan._CHECK_(vkCreateBuffer(device, bufferInfo, null, p_buffer), "Failed to create vertex buffer.");
             buffer = p_buffer.get(0);
 
             var bufMemRequirements = VkMemoryRequirements.malloc(stack);
@@ -31,7 +30,7 @@ class GraphicsBuffer {
                     .allocationSize(bufMemRequirements.size())
                     .memoryTypeIndex(findMemoryType(gpu, bufMemRequirements.memoryTypeBits(), propertyFlags));
             LongBuffer p_vertexBufMem = stack.mallocLong(1);
-            _CHECK_(vkAllocateMemory(device, bufAllocInfo, null, p_vertexBufMem), "Failed to allocate memory for vertex buffer.");
+            Vulkan._CHECK_(vkAllocateMemory(device, bufAllocInfo, null, p_vertexBufMem), "Failed to allocate memory for vertex buffer.");
             backingMemory = p_vertexBufMem.get(0);
             vkBindBufferMemory(device, buffer, backingMemory, 0);
         }

@@ -1,6 +1,6 @@
-package com.atomikmc.atomikvk.vulkan;
+package com.aivech.atomikvk.vulkan;
 
-import com.atomikmc.atomikvk.AtomikVk;
+import com.aivech.atomikvk.AtomikVk;
 import com.google.common.collect.ImmutableList;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.system.MemoryStack;
@@ -9,7 +9,6 @@ import org.lwjgl.vulkan.*;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 
-import static com.atomikmc.atomikvk.vulkan.Vulkan._CHECK_;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.*;
@@ -57,7 +56,7 @@ class Swapchain {
                     .oldSwapchain(VK_NULL_HANDLE); // holds an old swapchain if we are recreating due to resize or other event
 
             LongBuffer ppSwapchain = stack.mallocLong(1);
-            _CHECK_(vkCreateSwapchainKHR(device, createInfo, null, ppSwapchain), "Failed to create swapchain!");
+            Vulkan._CHECK_(vkCreateSwapchainKHR(device, createInfo, null, ppSwapchain), "Failed to create swapchain!");
             pSwapchain = ppSwapchain.get(0);
 
             IntBuffer pImageCount = stack.mallocInt(1);
@@ -83,7 +82,7 @@ class Swapchain {
                         1
                 );
                 LongBuffer ppImageView = stack.mallocLong(1);
-                _CHECK_(vkCreateImageView(device, viewCreateInfo, null, ppImageView), "failed to create image views!");
+                Vulkan._CHECK_(vkCreateImageView(device, viewCreateInfo, null, ppImageView), "failed to create image views!");
                 views.add(ppImageView.get(0));
             }
             imageViews = views.build();

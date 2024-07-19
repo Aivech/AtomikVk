@@ -1,6 +1,6 @@
-package com.atomikmc.atomikvk;
+package com.aivech.atomikvk;
 
-import com.atomikmc.atomikvk.glfw.GLFWHelper;
+import com.aivech.atomikvk.glfw.GLFWHelper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.lwjgl.system.Configuration;

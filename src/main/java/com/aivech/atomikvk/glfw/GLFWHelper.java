@@ -1,9 +1,9 @@
-package com.atomikmc.atomikvk.glfw;
+package com.aivech.atomikvk.glfw;
 
-import com.atomikmc.atomikvk.AtomikVk;
-import com.atomikmc.atomikvk.common.GraphicsProvider;
-import com.atomikmc.atomikvk.shaderc.SpirVCompiler;
-import com.atomikmc.atomikvk.vulkan.Vulkan;
+import com.aivech.atomikvk.common.GraphicsProvider;
+import com.aivech.atomikvk.vulkan.Vulkan;
+import com.aivech.atomikvk.AtomikVk;
+import com.aivech.atomikvk.shaderc.SpirVCompiler;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVulkan;
 import org.lwjgl.system.MemoryStack;

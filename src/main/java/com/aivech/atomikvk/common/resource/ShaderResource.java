@@ -1,7 +1,7 @@
-package com.atomikmc.atomikvk.common.resource;
+package com.aivech.atomikvk.common.resource;
 
-import com.atomikmc.atomikvk.shaderc.ShaderException;
-import com.atomikmc.atomikvk.shaderc.SpirVCompiler;
+import com.aivech.atomikvk.shaderc.ShaderException;
+import com.aivech.atomikvk.shaderc.SpirVCompiler;
 
 import java.io.File;
 import java.io.IOException;

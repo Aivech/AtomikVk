@@ -3,16 +3,16 @@ plugins {
     id 'application'
 }
 
-group 'com.atomikmc.atomikvk'
+group 'com.aivech.atomikvk'
 version '0.0.1'
 
-sourceCompatibility = 1.16
+sourceCompatibility = 1.17
 
 repositories {
     mavenCentral()
 }
 
-project.ext.lwjglVersion = "3.3.0"
+project.ext.lwjglVersion = "3.3.3"
 project.ext.lwjglNatives = "natives-linux"
 
 
@@ -20,12 +20,12 @@ project.ext.lwjglNatives = "natives-linux"
 dependencies {
     // testCompile group: 'junit', name: 'junit', version: '4.12'
 
-    implementation "org.joml:joml:1.10.3"
+    implementation "org.joml:joml:1.10.7"
 
-    implementation 'com.google.guava:guava:31.0.1-jre'
+    implementation 'com.google.guava:guava:33.2.1-jre'
 
-    implementation group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.15.0'
-    implementation group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.15.0'
+    implementation group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.23.1'
+    implementation group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.23.1'
 
     implementation platform("org.lwjgl:lwjgl-bom:$lwjglVersion")
 
@@ -60,11 +60,11 @@ jar {
     manifest {
         attributes(
                 "Manifest-Version": 1.0,
-                "Main-Class":"com.atomikmc.atomikvk.AtomikVk"
+                "Main-Class":"com.aivech.atomikvk.AtomikVk"
         )
     }
 }
 
 application {
-    mainClassName = "com.atomikmc.atomikvk.AtomikVk"
+    mainClass= "com.aivech.atomikvk.AtomikVk"
 }

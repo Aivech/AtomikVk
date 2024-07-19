@@ -1,6 +1,6 @@
-package com.atomikmc.atomikvk.vulkan;
+package com.aivech.atomikvk.vulkan;
 
-import com.atomikmc.atomikvk.AtomikVk;
+import com.aivech.atomikvk.AtomikVk;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;

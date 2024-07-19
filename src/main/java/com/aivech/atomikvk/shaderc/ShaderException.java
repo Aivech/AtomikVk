@@ -1,4 +1,4 @@
-package com.atomikmc.atomikvk.shaderc;
+package com.aivech.atomikvk.shaderc;
 
 public class ShaderException extends RuntimeException {
     public ShaderException(String message, Throwable cause) {
