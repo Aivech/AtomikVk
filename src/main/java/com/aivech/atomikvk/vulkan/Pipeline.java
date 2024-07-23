@@ -17,7 +17,7 @@ public class Pipeline {
     private final long p_pipelineLayout;
     final long p_pipeline;
 
-    Pipeline(VkDevice device, Swapchain swapchain, ShaderResource... shaderResources) {
+    Pipeline(VkDevice device, Swapchain swapchain, LongBuffer descriptorSetLayouts, ShaderResource... shaderResources) {
         try (MemoryStack stack = stackPush()) {
             Shader[] shaders = new Shader[shaderResources.length];
             var p_stages = VkPipelineShaderStageCreateInfo.calloc(shaderResources.length, stack);
@@ -82,7 +82,9 @@ public class Pipeline {
             renderPass = new RenderPass(device, swapchain);
 
             var pipelineLayoutCreateInfo = VkPipelineLayoutCreateInfo.calloc(stack)
-                    .sType(VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO);
+                    .sType(VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO)
+                    .setLayoutCount(1)
+                    .pSetLayouts(descriptorSetLayouts);
 
             var pp_pipelineLayout = stack.mallocLong(1);
             _CHECK_(vkCreatePipelineLayout(device, pipelineLayoutCreateInfo, null, pp_pipelineLayout), "Failed to create pipeline layout");

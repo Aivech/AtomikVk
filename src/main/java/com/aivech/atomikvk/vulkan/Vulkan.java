@@ -7,6 +7,7 @@ import com.aivech.atomikvk.shaderc.ShaderException;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFWVulkan;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
 import java.io.File;
@@ -43,6 +44,7 @@ public class Vulkan implements GraphicsProvider {
     private VkQueue transferQueue;
     private ShaderResource[] shaders;
     private Swapchain swapchain;
+    private LongBuffer descriptorSetLayouts;
     private Pipeline pipeline;
     private long[] framebuffers;
     private long commandPool;
@@ -67,7 +69,8 @@ public class Vulkan implements GraphicsProvider {
         getQueues();
         loadInitialResources();
         swapchain = new Swapchain(window, gpu, device, surfaceKHR);
-        pipeline = new Pipeline(device, swapchain, shaders);
+        createDescriptorSetLayout();
+        pipeline = new Pipeline(device, swapchain, descriptorSetLayouts, shaders);
         createFramebuffers();
         createCommandPool();
         createVertexBuffer();
@@ -133,7 +136,7 @@ public class Vulkan implements GraphicsProvider {
         destroySwapchain();
 
         swapchain = new Swapchain(glfwWindow, gpu, device, surfaceKHR);
-        pipeline = new Pipeline(device, swapchain, shaders);
+        pipeline = new Pipeline(device, swapchain, descriptorSetLayouts, shaders);
         createFramebuffers();
         createCommandPool();
         createCommandBuffers();
@@ -162,6 +165,13 @@ public class Vulkan implements GraphicsProvider {
             vkDeviceWaitIdle(device);
 
             destroySwapchain();
+
+            if (descriptorSetLayouts != null) {
+                var dsl = descriptorSetLayouts.get(0);
+                if (dsl != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device, descriptorSetLayouts.get(0), null); }
+                MemoryUtil.memFree(descriptorSetLayouts);
+                descriptorSetLayouts = null;
+            }
 
             if (indexBuffer != null) indexBuffer.free(device);
             if (vertexBuffer != null) vertexBuffer.free(device);
@@ -351,6 +361,21 @@ public class Vulkan implements GraphicsProvider {
 
     }
 
+    private void createDescriptorSetLayout() {
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            var uboLayoutBindings = new VkDescriptorSetLayoutBinding.Buffer(stack.calloc(VkDescriptorSetLayoutBinding.SIZEOF))
+                    .binding(0)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+                    .descriptorCount(1)
+                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);
+            var layoutInfo = VkDescriptorSetLayoutCreateInfo.calloc(stack)
+                    .sType(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO)
+                    .pBindings(uboLayoutBindings);
+            descriptorSetLayouts = MemoryUtil.memCallocLong(1);
+            _CHECK_(vkCreateDescriptorSetLayout(device, layoutInfo, null, descriptorSetLayouts), "Failed to create descriptor set layout");
+       }
+    }
+
     private void createFramebuffers() {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             framebuffers = new long[swapchain.imageViews.size()];
@@ -455,7 +480,7 @@ public class Vulkan implements GraphicsProvider {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             PointerBuffer data = stack.mallocPointer(1);
             vkMapMemory(device, stagingBuffer.backingMemory, 0, size, 0, data);
-            indexCopy(data, size);
+            data.getByteBuffer(0, (int) size).asShortBuffer().put(VkVertex.INDICES);
             vkUnmapMemory(device, stagingBuffer.backingMemory);
         }
 
@@ -587,10 +612,7 @@ public class Vulkan implements GraphicsProvider {
     }
 
     private void indexCopy(PointerBuffer dest, long size) {
-        var buffer = dest.getByteBuffer(0, (int) size);
-        for (var i: VkVertex.INDICES) {
-            buffer.putShort(i);
-        }
+        dest.getByteBuffer(0, (int) size).asShortBuffer().put(VkVertex.INDICES);
     }
 
     public static void _CHECK_(int vkRet, String msg) {
